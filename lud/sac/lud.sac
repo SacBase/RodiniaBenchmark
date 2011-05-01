@@ -1,0 +1,76 @@
+use StdIO: all;
+use Array: all;
+
+#ifdef FLOAT
+#define DBL float
+#define TOD tof
+#else 
+#define DBL double
+#define TOD tod
+#endif
+
+#ifndef SIZE
+#define SIZE 512
+#endif
+
+int main()
+{
+  DBL[SIZE,SIZE] mat;
+
+  mat = FibreScanFloatArray();
+
+  for( i = 0; i < SIZE; i++) {
+#ifdef C_IMP /* C implementation */
+    for (j = i; j < SIZE; j++) {
+      summ = mat[i, j];
+      for (k = 0; k < i; k++) { 
+        summ -= mat[i,k]*mat[k,j];
+      }  
+      mat[i,j] = summ;
+    }
+
+    for (j = i+1; j < SIZE; j++) {
+      summ = mat[j, i];
+      for (k = 0; k < i; k++) {
+        summ -= mat[j, k]*mat[k, i];
+      }
+      mat[j, i] = summ/mat[i, i];
+    }
+#else
+    mat = with {
+            ([i,i] <= iv=[m,j] < [i+1,SIZE]) {
+              res = with {
+                      ([0] <= iv=[k] < [i]) {
+                        s = mat[i,k]*mat[k,j];
+                      }:s;
+                    }:fold(-, mat[i,j]);
+            }:res;
+          }:modarray(mat);
+
+    mat = with {
+            ([i+1,i] <= iv=[j,n] < [SIZE,i+1]) {
+              res = with {
+                      ([0] <= iv=[k] < [i]) {
+                        s = mat[j,k]*mat[k,i];
+                      }:s;
+                    }:fold(-, mat[j,i]);
+              res = res/mat[i,i];
+            }:res;
+          }:modarray(mat);
+#endif
+  }
+
+#ifdef VERBOSE
+  for( i = 0; i < SIZE; i++) {
+    for( j = 0; j < SIZE; j++) {
+      printf("[%d %d]:%f\n", i, j, mat[i, j]);
+    }
+    printf("\n");
+  }
+#else
+  print(mat[0,0]);
+#endif
+
+  return( 0);
+}
+
