@@ -19,7 +19,7 @@ use Math: all;
 /**
 @var M value for Linear Congruential Generator (LCG); use GCC's value
 */
-#define M 1000000000
+#define M 2147483647
 /**
 @var A value for LCG
 */
@@ -29,24 +29,23 @@ use Math: all;
 */
 #define C 12345
 
-#define PI TOD(3.14)
+#define PI TOD(3.141593)
 
-DBL randu(int[Nparticles] seed, int index)
+DBL, int[Nparticles] randu(int[Nparticles] seed, int index)
 {
   num = A*seed[index] + C;
   seed[index] = num % M;
-/*  return( TOD(fabs(seed[index])/(TOD(M)))); */
-  return( TOD(abs(seed[index]))/(TOD(M))); 
+  return( fabs(TOD(seed[index])/TOD(M)), seed);
 }
 
-DBL randn(int[Nparticles] seed, int index)
+DBL, int[Nparticles] randn(int[Nparticles] seed, int index)
 {
   /*Box-Muller algorithm*/
-  u = randu(seed, index);
-  v = randu(seed, index);
+  u, seed = randu(seed, index);
+  v, seed = randu(seed, index);
   cosine = cos(TOD(2.0)*PI*v);
   rt = TOD(-2.0)*log(u);
-  return( sqrt(rt)*cosine);
+  return( sqrt(rt)*cosine, seed);
 }
 
 DBL roundDouble(DBL value)
@@ -63,18 +62,20 @@ DBL roundDouble(DBL value)
   return( res);
 }
 
-void addNoise(int[IszX, IszY, Nfr] array3D, int dimX, int dimY, int dimZ, int[Nparticles] seed)
+int[IszX, IszY, Nfr], int[Nparticles] addNoise(int[IszX, IszY, Nfr] array3D, int dimX, int dimY, int dimZ, int[Nparticles] seed)
 {
   for(x = 0; x < dimX; x++){
     for(y = 0; y < dimY; y++){
       for(z = 0; z < dimZ; z++){
-        array3D[x, y, z] = array3D[x, y, z] + toi(TOD(5.0)*randn(seed, 0));
+        tmp, seed = randn(seed, 0);
+        array3D[x, y, z] = array3D[x, y, z] + toi(TOD(5.0)*tmp);
       }
     }
   }
+  return( array3D, seed);
 }
 
-void setIf(int testValue, int newValue, int[IszX, IszY, Nfr] array3D, int dimX, int dimY, int dimZ)
+int[IszX, IszY, Nfr] setIf(int testValue, int newValue, int[IszX, IszY, Nfr] array3D, int dimX, int dimY, int dimZ)
 {
   for(x = 0; x < dimX; x++){
     for(y = 0; y < dimY; y++){
@@ -85,9 +86,10 @@ void setIf(int testValue, int newValue, int[IszX, IszY, Nfr] array3D, int dimX, 
       }
     }
   }
+  return( array3D);
 }
 
-void dilate_matrix(int[IszX, IszY, Nfr] matrix, int posX, int posY, int posZ, int dimX, int dimY, int dimZ, int error)
+int[IszX, IszY, Nfr] dilate_matrix(int[IszX, IszY, Nfr] matrix, int posX, int posY, int posZ, int dimX, int dimY, int dimZ, int error)
 {
   startX = posX - error;
   while(startX < 0)
@@ -107,28 +109,31 @@ void dilate_matrix(int[IszX, IszY, Nfr] matrix, int posX, int posY, int posZ, in
 
   for(x = startX; x < endX; x++){
     for(y = startY; y < endY; y++){
-      distance = sqrt( pow(TOD(x-posX),TOD(2.0)) + pow(TOD(y-posY),TOD(2.0)));
+      /* distance = sqrt( pow(TOD(x-posX),TOD(2.0)) + pow(TOD(y-posY),TOD(2.0))); */
+      distance = sqrt( TOD(x-posX)*TOD(x-posX) + TOD(y-posY)*TOD(y-posY));
       if(distance < TOD(error)) {
         matrix[x, y, posZ] = 1;
       }
     }
   }
+  return( matrix);
 }
 
-void imdilate_disk(int[IszX, IszY, Nfr] matrix, int dimX, int dimY, int dimZ, int error, int[IszX, IszY, Nfr] newMatrix)
+int[IszX, IszY, Nfr] imdilate_disk( int[IszX, IszY, Nfr] matrix, int dimX, int dimY, int dimZ, int error, int[IszX, IszY, Nfr] newMatrix)
 {
   for(z = 0; z < dimZ; z++){
     for(x = 0; x < dimX; x++){
       for(y = 0; y < dimY; y++){
 	if(matrix[x, y, z] == 1){
-	  dilate_matrix(newMatrix, x, y, z, dimX, dimY, dimZ, error);
+	  newMatrix = dilate_matrix(newMatrix, x, y, z, dimX, dimY, dimZ, error);
 	}
       }
     }
   }
+  return( newMatrix);
 }
 
-int[IszX, IszY, Nfr] videoSequence( int[Nparticles] seed)
+int[IszX, IszY, Nfr], int[Nparticles] videoSequence( int[Nparticles] seed)
 {
   I = genarray([IszX, IszY, Nfr], 0); 
 
@@ -138,7 +143,7 @@ int[IszX, IszY, Nfr] videoSequence( int[Nparticles] seed)
   x0 = IszY/2;
   y0 = IszX/2;
   I[x0, y0, 0] = 1;
-  
+
   /*move point*/
   for(k = 1; k < Nfr; k++) {
     xk = abs(x0 + (k-1));
@@ -152,10 +157,9 @@ int[IszX, IszY, Nfr] videoSequence( int[Nparticles] seed)
     }
     I[x, y, z] = 1;
   }
-      
-  /*dilate matrix*/
+
   newMatrix = genarray([IszX, IszY, Nfr], 0); 
-  imdilate_disk(I, IszX, IszY, Nfr, 5, newMatrix);
+  newMatrix = imdilate_disk(I, IszX, IszY, Nfr, 5, newMatrix);
 
   for(x = 0; x < IszX; x++){
     for(y = 0; y < IszY; y++){
@@ -164,14 +168,12 @@ int[IszX, IszY, Nfr] videoSequence( int[Nparticles] seed)
       }
     }
   }
-  
-  /*define background, add noise*/
-  setIf(0, 100, I, IszX, IszY, Nfr);
-  setIf(1, 228, I, IszX, IszY, Nfr);
-  /*add noise*/
-  addNoise(I, IszX, IszY, Nfr, seed);
 
-  return( I);
+  I = setIf(0, 100, I, IszX, IszY, Nfr);
+  I = setIf(1, 228, I, IszX, IszY, Nfr);
+  I, seed = addNoise(I, IszX, IszY, Nfr, seed);
+
+  return( I, seed);
 }
 
 int[.,.] strelDisk( int radius)
@@ -225,7 +227,7 @@ int findIndex(DBL[Nparticles] CDF, int lengthCDF, DBL value)
   else {
     res = index;
   }
-  return( index);
+  return( res);
 }
 
 void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
@@ -251,23 +253,13 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
   }
 
   objxy = getneighbors(disk, countOnes, radius);
-  
+
   /* initial weights are all equal (1/Nparticles) */
   weights = genarray( [Nparticles], TOD(0.0));
   for(x = 0; x < Nparticles; x++){
     weights[x] = TOD(1.0)/(TOD(Nparticles)); 
   }
 
-/*
-  double *likelihood = (double *)malloc(sizeof(double)*Nparticles);
-  double *arrayX = (double *)malloc(sizeof(double)*Nparticles);
-  double *arrayY = (double *)malloc(sizeof(double)*Nparticles);
-  double *xj = (double *)malloc(sizeof(double)*Nparticles);
-  double *yj = (double *)malloc(sizeof(double)*Nparticles);
-  double *CDF = (double *)malloc(sizeof(double)*Nparticles);
-  double *u = (double *)malloc(sizeof(double)*Nparticles);
-  int *ind = (int*)malloc(sizeof(int)*countOnes*Nparticles); // [Nparticles,countOnes]
-*/
   likelihood = genarray([Nparticles], TOD(0.0)); 
   arrayX = genarray([Nparticles], TOD(0.0));
   arrayY = genarray([Nparticles], TOD(0.0));
@@ -282,16 +274,16 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
     arrayY[x] = TOD(ye);
   }
 
-  printf("Starting main loop...\n");
-
   for(k = 1; k < Nfr; k++) {
     /* apply motion model
      * draws sample from motion model (random walk). The only prior information
      * is that the object moves 2x as fast as in the y direction
      */
     for(x = 0; x < Nparticles; x++) {
-      arrayX[x] = arrayX[x] + TOD(1.0) + TOD(5.0)*randn(seed, x);
-      arrayY[x] = arrayY[x] + TOD(-2.0) + TOD(2.0)*randn(seed, x);
+      tmp, seed = randn( seed, x);
+      arrayX[x] = arrayX[x] + TOD(1.0) + TOD(5.0)*tmp;
+      tmp, seed = randn( seed, x);
+      arrayY[x] = arrayY[x] + TOD(-2.0) + TOD(2.0)*tmp;
     }
 
     /* particle filter likelihood */
@@ -302,18 +294,18 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
        * p(z|x). It is possible in this case. why? a hometask for you.		
        * calc ind
        */
-      for(y = 0; y < countOnes; y++) {
-	indX = roundDouble(arrayX[x]) + objxy[y*2 + 1];
-	indY = roundDouble(arrayY[x]) + objxy[y*2];
-/*	ind[x, y] = fabs(toi(indX)*IszY*Nfr + toi(indY)*Nfr + k); */
-	ind[x, y] = abs(toi(indX)*IszY*Nfr + toi(indY)*Nfr + k); 
-	if(ind[x, y] >= max_size) {
-	  ind[x, y] = 0;
-        }
-      }
       likelihood[x] = TOD(0.0);
       for(y = 0; y < countOnes; y++) {
-	likelihood[x] = (likelihood[x] + pow(TOD(I[ind[x, y]] - 100),TOD(2.0)) - pow(TOD(I[ind[x, y]] - 228),TOD(2.0)))/TOD(50.0);
+	indX = toi(roundDouble(arrayX[x])) + toi(objxy[y*2 + 1]);
+	indY = toi(roundDouble(arrayY[x])) + toi(objxy[y*2]);
+
+        if( abs(indX*IszY*Nfr + indY*Nfr + k) >= max_size) {
+          a = 0; b = 0; c = 0;
+        }
+        else {
+          a = indX; b = indY; c = k;
+        }
+	likelihood[x] = likelihood[x] + TOD((I[a,b,c] - 100)*(I[a,b,c] - 100) - (I[a,b,c] - 228)*(I[a,b,c] - 228))/TOD(50.0);
       }
       likelihood[x] = likelihood[x]/(TOD( countOnes));
     }
@@ -341,8 +333,11 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
       ye += arrayY[x] * weights[x];
     }
 
+    printf("XE: %lf\n", xe);
+    printf("YE: %lf\n", ye);
     distance = sqrt( pow(TOD(xe-TOD(IszY/2)),TOD(2.0)) + pow(TOD(ye-TOD(IszX/2)),TOD(2.0)));
     printf("%lf\n", distance);
+
     /* display(hold off for now)
      * pause(hold off for now)
      * resampling */
@@ -351,16 +346,14 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
       CDF[x] = weights[x] + CDF[x-1];
     }
 
-    u1 = (TOD(1.0)/(TOD(Nparticles)))*randu(seed, 0);
+    tmp, seed = randu( seed, 0);
+    u1 = (TOD(1.0)/(TOD(Nparticles)))*tmp;
     for(x = 0; x < Nparticles; x++){
       u[x] = u1 + TOD(x)/(TOD(Nparticles));
     }
     
     for(j = 0; j < Nparticles; j++){
       i = findIndex(CDF, Nparticles, u[j]);
-      if(i == -1) {
-	i = Nparticles-1;
-      }
       xj[j] = arrayX[i];
       yj[j] = arrayY[i];
     }
@@ -383,8 +376,16 @@ int main()
     seed[i] = i; 
   }
 
-  I = videoSequence( seed);
-
+  I, seed = videoSequence( seed);
+/*
+  for( i = 0; i < IszX; i++) {
+    for( j = 0; j < IszY; j++) {
+      for( k = 0; k < Nfr; k++) {
+        printf( "%d\n", I[i, j, k]);
+      }
+    }
+  }
+*/
   particleFilter(I, seed);
 
   return( 0);
