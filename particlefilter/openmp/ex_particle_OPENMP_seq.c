@@ -537,7 +537,7 @@ void particleFilter(int * I, int IszX, int IszY, int Nfr, int * seed, int Nparti
     double sumWeights = 0;
 
     #pragma omp parallel for private(x) reduction(+:sumWeights)
-    for(x = 0; x < Nparticles; x++){
+    for(x = 0; x < Nparticles; x++) {
       sumWeights += weights[x];
     }
 
@@ -719,16 +719,7 @@ int main(int argc, char * argv[])
 #endif
   //call video sequence
   videoSequence(I, IszX, IszY, Nfr, seed);
-/*
-  int j, k;
-  for( i = 0; i < IszX; i++) {
-    for( j = 0; j < IszY; j++) {
-      for( k = 0; k < Nfr; k++) {
-        printf( "%d\n", I[i*IszY*Nfr+j*Nfr+k]);
-      }
-    }
-  }
-*/
+
 #ifdef TIME
   long long endVideoSequence = get_time();
   printf("VIDEO SEQUENCE TOOK %f\n", elapsed_time(start, endVideoSequence));

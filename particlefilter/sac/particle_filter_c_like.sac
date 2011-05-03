@@ -214,20 +214,19 @@ DBL[.] getneighbors(int[.,.] se, int numOnes, int radius)
 
 int findIndex(DBL[Nparticles] CDF, int lengthCDF, DBL value)
 {
+  res = 0;
   index = -1;
   for(x = 0; x < lengthCDF; x++) {
     if(CDF[x] >= value && index == -1) {
       index = x;
     }
   }
-
   if(index == -1){
     res = lengthCDF-1;
   }
   else {
     res = index;
   }
-
   return( res);
 }
 
@@ -287,41 +286,44 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
       arrayY[x] = arrayY[x] + TOD(-2.0) + TOD(2.0)*tmp;
     }
 
-    likelihood = with {
-                   ([0] <= iv=[x] < [Nparticles]) {
-		      res = TOD(0.0);
-		      for(y = 0; y < countOnes; y++) {
-			indX = toi(roundDouble(arrayX[x])) + toi(objxy[y*2 + 1]);
-			indY = toi(roundDouble(arrayY[x])) + toi(objxy[y*2]);
+    /* particle filter likelihood */
+    for(x = 0; x < Nparticles; x++) {
+      /* compute the likelihood: remember our assumption is that you know
+       * foreground and the background image intensity distribution.
+       * Notice that we consider here a likelihood ratio, instead of
+       * p(z|x). It is possible in this case. why? a hometask for you.		
+       * calc ind
+       */
+      likelihood[x] = TOD(0.0);
+      for(y = 0; y < countOnes; y++) {
+	indX = toi(roundDouble(arrayX[x])) + toi(objxy[y*2 + 1]);
+	indY = toi(roundDouble(arrayY[x])) + toi(objxy[y*2]);
 
-			if( abs(indX*IszY*Nfr + indY*Nfr + k) >= max_size) {
-			  a = 0; b = 0; c = 0;
-			}
-			else {
-			  a = indX; b = indY; c = k;
-			}
-			res = res + TOD((I[a,b,c] - 100)*(I[a,b,c] - 100) - (I[a,b,c] - 228)*(I[a,b,c] - 228))/TOD(50.0);
-		      }
-		      res = res/(TOD( countOnes));
-                   }:res;
-                 }:modarray(likelihood);
-  
-    weights = with {
-                ([0] <= iv=[x] < [Nparticles]) {
-                  res = weights[x]*exp(likelihood[x]);
-                }:res;
-              }:modarray(weights);
+        if( abs(indX*IszY*Nfr + indY*Nfr + k) >= max_size) {
+          a = 0; b = 0; c = 0;
+        }
+        else {
+          a = indX; b = indY; c = k;
+        }
+	likelihood[x] = likelihood[x] + TOD((I[a,b,c] - 100)*(I[a,b,c] - 100) - (I[a,b,c] - 228)*(I[a,b,c] - 228))/TOD(50.0);
+      }
+      likelihood[x] = likelihood[x]/(TOD( countOnes));
+    }
+
+    /* update & normalize weights
+     * using equation (63) of Arulampalam Tutorial */
+    for(x = 0; x < Nparticles; x++){
+      weights[x] = weights[x] * exp(likelihood[x]);
+    }
 
     sumWeights = TOD(0.0);
     for(x = 0; x < Nparticles; x++){
       sumWeights += weights[x];
     }
 
-    weights = with {
-                ([0] <= iv=[x] < [Nparticles]) {
-                  res = weights[x]/sumWeights;
-                }:res;
-              }:modarray(weights);
+    for(x = 0; x < Nparticles; x++){
+      weights[x] = weights[x]/sumWeights;
+    }
 
     xe = TOD(0.0);
     ye = TOD(0.0);
@@ -336,6 +338,9 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
     distance = sqrt( pow(TOD(xe-TOD(IszY/2)),TOD(2.0)) + pow(TOD(ye-TOD(IszX/2)),TOD(2.0)));
     printf("%lf\n", distance);
 
+    /* display(hold off for now)
+     * pause(hold off for now)
+     * resampling */
     CDF[0] = weights[0];
     for(x = 1; x < Nparticles; x++){
       CDF[x] = weights[x] + CDF[x-1];
@@ -343,47 +348,22 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
 
     tmp, seed = randu( seed, 0);
     u1 = (TOD(1.0)/(TOD(Nparticles)))*tmp;
-
-    u = with {
-          ([0] <= iv=[x] < [Nparticles]) {
-            res = u1 + TOD(x)/(TOD(Nparticles));
-          }:res;
-        }:modarray(u);   
- 
+    for(x = 0; x < Nparticles; x++){
+      u[x] = u1 + TOD(x)/(TOD(Nparticles));
+    }
+    
     for(j = 0; j < Nparticles; j++){
       i = findIndex(CDF, Nparticles, u[j]);
       xj[j] = arrayX[i];
-    }
-
-    for(j = 0; j < Nparticles; j++){
-      i = findIndex(CDF, Nparticles, u[j]);
       yj[j] = arrayY[i];
     }
 
-/*
-    xj = with {
-          ([0] <= iv=[x] < [Nparticles]) {
-            i = findIndex(CDF, Nparticles, u[x]);
-            res = arrayX[i];
-          }:res;
-        }:modarray(xj); 
-
-    yj = with {
-          ([0] <= iv=[x] < [Nparticles]) {
-            i = findIndex(CDF, Nparticles, u[x]);
-            res = arrayY[i];
-          }:res;
-        }:modarray(yj); 
-*/
     /* reassign arrayX and arrayY */
     arrayX = xj;
     arrayY = yj;
-
-    weights = with {
-                ([0] <= iv=[x] < [Nparticles]) {
-                  res = TOD(1.0)/(TOD(Nparticles));
-                }:res;
-              }:modarray(weights);
+    for(x = 0; x < Nparticles; x++){
+      weights[x] = TOD(1.0)/(TOD(Nparticles));
+    }
   }
 }
 
@@ -397,7 +377,15 @@ int main()
   }
 
   I, seed = videoSequence( seed);
-
+/*
+  for( i = 0; i < IszX; i++) {
+    for( j = 0; j < IszY; j++) {
+      for( k = 0; k < Nfr; k++) {
+        printf( "%d\n", I[i, j, k]);
+      }
+    }
+  }
+*/
   particleFilter(I, seed);
 
   return( 0);
