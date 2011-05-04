@@ -1,0 +1,237 @@
+use StdIO: all;
+use Array: all;
+use Random: all;
+use Math: all;
+
+#ifdef FLOAT
+#define DBL float
+#define TOD tof
+#else
+#define DBL double 
+#define TOD tod
+#endif 
+
+#define IN     65536
+#define HIDDEN 16
+#define OUT    1
+
+#define RAND_MAX 2147483647
+
+#define ETA      TOD(0.3)       
+#define MOMENTUM TOD(0.3)  
+
+#define ABS(x) (((x) > TOD(0.0)) ? (x) : (-(x)))
+
+DBL[.,.] bpnn_randomize_weights( DBL[.,.] w)
+{
+  m = shape(w)[0]-1;
+  n = shape(w)[1]-1;
+
+  for (i = 0; i <= m; i++) {
+    for (j = 0; j <= n; j++) {
+     w[i,j] = TOD(random(0, RAND_MAX))/TOD(RAND_MAX);
+    }
+  }
+  return( w);
+}
+
+DBL[.] bpnn_randomize_row( DBL[.] w)
+{
+  m = shape(w)[0]-1;
+  for (i = 0; i <= m; i++) {
+    w[i] = TOD(0.1);
+  }
+  return( w);
+}
+
+DBL[.,.] bpnn_zero_weights( DBL[.,.] w)
+{
+  m = shape(w)[0]-1;
+  n = shape(w)[1]-1;
+
+  for (i = 0; i <= m; i++) {
+    for (j = 0; j <= n; j++) {
+      w[i, j] = TOD(0.0);
+    }
+  }
+  return( w);
+}
+
+DBL[.] load( DBL[.] w)
+{
+  m = shape(w)[0]-1;
+
+  for (i = 1; i <= m; i++) {
+    w[i] =  TOD(random(0, RAND_MAX))/TOD(RAND_MAX);
+  }
+  return( w);
+}
+
+DBL[.], DBL[.] bpnn_layerforward(DBL[.] l1, DBL[.] l2, DBL[.,.] conn)
+{
+  n1 = shape(l1)[0]-1;
+  n2 = shape(l2)[0]-1;
+
+  /*** Set up thresholding unit ***/
+  l1[0] = TOD(1.0);
+
+  l2 = with {
+         ( [1] <= iv=[j] < [n2+1]) {
+           tmp = with {
+                   ( [0] <= iv=[k] < [n1+1]):conn[k, j]*l1[k];
+                 }:fold(+, TOD(0.0));
+           res = (TOD(1.0) / (TOD(1.0) + exp(-tmp))); 
+         }:res;
+       }:modarray(l2); 
+
+  return( l1, l2);
+}
+
+DBL, DBL[.] bpnn_output_error(DBL[.] delta, DBL[.] target, DBL[.] output)  
+{
+  nj = shape(delta)[0]-1; 
+
+  errsum = TOD(0.0);
+  for (j = 1; j <= nj; j++) {
+    o = output[j];
+    t = target[j];
+    delta[j] = o * (TOD(1.0) - o) * (t - o);
+    errsum = errsum + ABS(delta[j]);
+  }
+
+/*
+  errsum, delta = 
+    with {
+      ( [1] <= iv=[j] < [nj+1]) {
+        o = output[j];
+        t = target[j];
+        res2 = o * (TOD(1.0) - o) * (t - o);
+        res1 = ABS( res2);
+      }:(res1, res2);
+    }:(fold(+,TOD(0.0)), modarray(delta));   
+*/
+  return( errsum, delta);
+}
+
+DBL, DBL[.] bpnn_hidden_error(DBL[.] delta_h, DBL[.] delta_o, DBL[.,.] who, DBL[.] hidden)
+{
+  nh = shape(delta_h)[0]-1; 
+  no = shape(delta_o)[0]-1; 
+
+  errsum = TOD(0.0);
+  for (j = 1; j <= nh; j++) {
+    h = hidden[j];
+    tmp = TOD(0.0);
+    for (k = 1; k <= no; k++) {
+      tmp = tmp + delta_o[k] * who[j, k];
+    }
+    delta_h[j] = h * (TOD(1.0) - h) * tmp;
+    errsum = errsum + ABS(delta_h[j]);
+  }
+  return( errsum, delta_h);
+}
+
+DBL[.], DBL[.,.], DBL[.,.] bpnn_adjust_weights(DBL[.] delta, DBL[.] ly, DBL[.,.] w, DBL[.,.] oldw)
+{
+  ndelta = shape(delta)[0] - 1;
+  nly = shape(ly)[0] - 1;
+
+  ly[0] = TOD(1.0);
+
+  /* parallel for loop */
+/*
+  for (j = 1; j <= ndelta; j++) {
+    for (k = 0; k <= nly; k++) {
+      new_dw = ((ETA * delta[j] * ly[k]) + (MOMENTUM * oldw[k,j]));
+      w[k, j] = w[k, j] + new_dw;
+      oldw[k, j] = new_dw;
+    }
+  }
+*/
+
+  w, oldw = with {
+              ( [0,1] < iv=[k,j] <= [nly,ndelta]) {
+                new_dw = ((ETA * delta[j] * ly[k]) + (MOMENTUM * oldw[k,j]));
+                res1 = w[k, j] + new_dw;
+                res2 = new_dw;
+              }:(res1,res2);
+            }:( modarray(w),modarray(oldw));
+
+  return( ly, w, oldw);
+}
+
+int main()
+{
+  /***************** Initialization ********************/
+  input_units = genarray( [IN+1], TOD(0.0));
+  hidden_units = genarray( [HIDDEN+1], TOD(0.0));
+  output_units = genarray( [OUT+1], TOD(0.0));
+
+  hidden_delta = genarray( [HIDDEN+1], TOD(0.0));
+  output_delta = genarray( [OUT+1], TOD(0.0));
+  target = genarray( [OUT+1], TOD(0.0));
+
+  input_weights = genarray( [IN+1, HIDDEN+1], TOD(0.0));
+  hidden_weights = genarray( [HIDDEN+1, OUT+1], TOD(0.0));
+
+  input_prev_weights = genarray( [IN+1, HIDDEN+1], TOD(0.0));
+  hidden_prev_weights = genarray( [HIDDEN+1, OUT+1], TOD(0.0));
+
+  srandom( 7);  
+
+  input_weights = bpnn_randomize_weights(input_weights);
+  hidden_weights = bpnn_randomize_weights(hidden_weights);
+  input_prev_weights = bpnn_zero_weights(input_prev_weights);
+  hidden_prev_weights = bpnn_zero_weights(hidden_prev_weights);
+  target = bpnn_randomize_row(target);
+
+  input_units = load( input_units); 
+
+  /*****************************************************/
+ 
+  /* Actual computation */ 
+  input_units, hidden_units = bpnn_layerforward(input_units, hidden_units,input_weights);
+  hidden_units, output_units = bpnn_layerforward(hidden_units, output_units, hidden_weights);
+/*
+  for( i = 0; i < HIDDEN+1; i++) {
+    printf("%f\n", hidden_units[i]);
+  }
+  for( i = 0; i < OUT+1; i++) {
+    printf("%f\n", output_units[i]);
+  }
+*/
+  out_err, output_delta = bpnn_output_error(output_delta, target, output_units);
+  hid_err, hidden_delta = bpnn_hidden_error(hidden_delta, output_delta, hidden_weights, hidden_units);  
+  hidden_units, hidden_weights, hidden_prev_weights = 
+    bpnn_adjust_weights(output_delta, hidden_units, hidden_weights, hidden_prev_weights);
+/*
+  for( i = 0; i < HIDDEN+1; i++) {
+    for( j = 0; j < OUT+1; j++) {
+      printf("%f\n", hidden_weights[i,j]);
+    }
+  }
+
+  for( i = 0; i < HIDDEN+1; i++) {
+    for( j = 0; j < OUT+1; j++) {
+      printf("%f\n", hidden_prev_weights[i,j]);
+    }
+  }
+*/
+  input_units, input_weights, input_prev_weights = 
+    bpnn_adjust_weights(hidden_delta, input_units, input_weights, input_prev_weights);
+
+  for( i = 0; i < IN+1; i++) {
+    for( j = 0; j < HIDDEN+1; j++) {
+      printf("%f\n", input_weights[i,j]);
+    }
+  }
+
+  for( i = 0; i < IN+1; i++) {
+    for( j = 0; j < HIDDEN+1; j++) {
+      printf("%f\n", input_prev_weights[i,j]);
+    }
+  }
+
+  return( 0);
+}
+
