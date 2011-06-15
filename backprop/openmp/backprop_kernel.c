@@ -39,50 +39,90 @@ void bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 {
   int in, hid, out;
   float out_err, hid_err;
-  
+  int i, j;  
+
+/* 
   in = net->input_n;   // 65536
   hid = net->hidden_n; // 16
   out = net->output_n; // 1   
+*/
+
+  in =  65536;   // 65536
+  hid = 16;      // 16
+  out = 1;       // 1   
    
 #ifdef VERBOSE
   printf("Performing CPU computation\n");
 #endif
-  bpnn_layerforward(net->input_units, net->hidden_units,net->input_weights, in, hid);
 
-  int i;  
-  for( i = 0; i < hid+1; i++) {
-    printf("%f\n", net->hidden_units[i]);
-  }
+  struct timeval tv1,tv2;
 
-  bpnn_layerforward(net->hidden_units, net->output_units, net->hidden_weights, hid, out);
+  int iter;
+  for( iter = 0; iter < ITER; iter++) {
+    gettimeofday( &tv1, NULL);
+
+    bpnn_layerforward(net->input_units, net->hidden_units,net->input_weights, in, hid);
+    bpnn_layerforward(net->hidden_units, net->output_units, net->hidden_weights, hid, out);
+
+  #ifdef OUTPUT
 /*
-  int i;  
-  for( i = 0; i < hid+1; i++) {
-    printf("%f\n", net->hidden_units[i]);
-  }
-  for( i = 0; i < out+1; i++) {
-    printf("%f\n", net->output_units[i]);
-  }
+    for( i = 0; i < hid+1; i++) {
+      printf("%f\n", net->hidden_units[i]);
+    }
+    for( i = 0; i < out+1; i++) {
+      printf("%f\n", net->output_units[i]);
+    }
 */
-  bpnn_output_error(net->output_delta, net->target, net->output_units, out, &out_err);
-  bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err);  
-  bpnn_adjust_weights(net->output_delta, out, net->hidden_units, hid, net->hidden_weights, net->hidden_prev_weights);
+  #endif
+
+    bpnn_output_error(net->output_delta, net->target, net->output_units, out, &out_err);
+    bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err); 
+
+  #ifdef OUTPUT
 /*
+    printf("output error=%f, hidden error=%f\n", out_err, hid_err);
+*/
+  #endif
+   
+    bpnn_adjust_weights(net->output_delta, out, net->hidden_units, hid, net->hidden_weights, net->hidden_prev_weights);
+
+  #ifdef OUTPUT
+/*
+    for( i = 0; i < hid+1; i++) {
+      for( j = 0; j < out+1; j++) {
+	printf("%f", net->hidden_weights[i][j]);
+      }
+      printf("\n");
+    }
+    for( i = 0; i < hid+1; i++) {
+      for( j = 0; j < out+1; j++) {
+	printf("%f", net->hidden_prev_weights[i][j]);
+      }
+      printf("\n");
+    }
+*/
+  #endif
+
+    bpnn_adjust_weights(net->hidden_delta, hid, net->input_units, in, net->input_weights, net->input_prev_weights);
+
+    gettimeofday( &tv2, NULL);
+    double runtime = ((tv2.tv_sec*1000.0 + tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0 + tv1.tv_usec/1000.0));
+    printf("Back propagation runtime(1 iteration in milliseconds): %f\n", runtime);
+  }
+
+#ifdef OUTPUT
   for( i = 0; i < hid+1; i++) {
     for( j = 0; j < out+1; j++) {
       printf("%f\n", net->hidden_weights[i][j]);
     }
   }
+
   for( i = 0; i < hid+1; i++) {
     for( j = 0; j < out+1; j++) {
       printf("%f\n", net->hidden_prev_weights[i][j]);
     }
   }
-*/
-  bpnn_adjust_weights(net->hidden_delta, hid, net->input_units, in, net->input_weights, net->input_prev_weights);
 
-/*
-  int i, j; 
   for( i = 0; i < in+1; i++) {
     for( j = 0; j < hid+1; j++) {
       printf("%f\n", net->input_weights[i][j]);
@@ -93,7 +133,7 @@ void bpnn_train_kernel(BPNN *net, float *eo, float *eh)
       printf("%f\n", net->input_prev_weights[i][j]);
     }
   }
-*/
+#endif
 }
 
 void load( BPNN *net)
@@ -147,7 +187,8 @@ int setup(int argc, char *argv[])
     exit(0);
   }
 
-  layer_size = atoi(argv[1]);
+  //layer_size = atoi(argv[1]);
+  layer_size = 65536;
   
   int seed;
 

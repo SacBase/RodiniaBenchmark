@@ -1,0 +1,13 @@
+* bfs
+This benchmark has not been converted to SAC yet. It is a bit difficult because: to 
+parallelise the parallel for loop, i.e. the one with OpenMP pragma, we need to convert
+it into a WITH-loop. However, the two output arrays of this for loop, i.e. cost and
+updating_graph_mask, can not be computed on a one-to-one mapping specified by the 
+WITH-loop. This is because, during each iteration of the outermost for loop, a parent
+essentilly traverse each of each sons and update the corresponding element in the cost
+and updating_graph_mask arrays. However, the sons can be anywhere within the two arrays
+and such position does not need to corresponding to the parent's position. Also, in 
+this case, each parent essentially produce more than one element, which does not match
+the sematics of a WITH-loop, which specifies that each iteration only produces one and
+only one element. So we postpone this bencahmark and it needs further consideration.
+

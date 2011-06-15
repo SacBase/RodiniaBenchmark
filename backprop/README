@@ -1,0 +1,92 @@
+
+There are three subdirectories: openmp, cuda and sac. The openmp and cuda directories
+contains the source files from the original Rodinia benchmark suite. The sac directory
+contains the equivalent SAC implementation. 
+
+The original openmp implementation has been left unchanged. However, the Rodinia cuda 
+implementation has been changed with a new kernel added: my_bpnn_layerforwatd_CUDA. 
+This kernel is more efficient than the original one in two ways: it enables better 
+memory coalescing and performs the reduction on shared memory array weight_matrix
+more efficiently. Because of this two improvements, the new kernel is almost three
+times faster than the original kernel. On interesting fact about the Rodinia cuda 
+implementation is that they decide to only cudarize two functions out of the five
+functions that implement the back propagation, namely, layer_forward and adjust_weights
+on the large arrays (first and five calls). The SAC implementation has intentionally
+mimic this pattern (more below).      
+
+The SAC implantation has two versions: backprop.sac and backprop_no_boundary.sac. For
+some reason, the Rodinia openmp and cuda implementation include some boundary elements
+for each array involved (for 1D array, this includes a leading element and for 2D array
+this includes a top border line and left border line). However, such boundary elements 
+seems to be totally unnecessary (at least for the left border line). Such boundary 
+elements causes inefficiency in the SAC generated code in the following way: suppose 
+the thread block is 16x16 and the length of the X dimension of a 2D array is 17 ( this
+is actually the case in this benchmark). The means that the CUDA grid will contains two 
+blocks in the X dimension even though the only the first column of threads of the second
+block will participate in actual computation. However, since the first column of the 2D
+array is completely redundant and can be ignore, than we are left with 16 elements and
+only one block along the X dimension is needed. This reduces the number of instructions
+executed significantly. The Rodinia CUDA implementation applies a trick to work on only
+the inner elements without touching the top and left border elements. This is essentially
+the same thing. Another thing worth mentioning is that using a 16x32 thread block on the 
+65536x16 2D array is almost twice slower than using a 16x16 thread block. This is because
+on the new Fermi architecture, each warp consists of 32 threads, and if the block is 
+16x32, for each scheduled warps, half of the threads is idle (because they fall off the
+boundary of the X dimension of the 2D array which is only 16). With 16x16 blocks, all 
+32 threads of warp will be working on the array. 
+
+POTENTIAL IMPROVEMENT:
+The above observation suggests an improvement to the currently CUDA backend of the SAC 
+compiler: then the withloop bounds are known, such as in the case, it might be beneficial 
+to generated thread block shape according to the bounds instead of using a fixed shape 
+across all kernels (which is what the current implementation does, and very unfortunately, 
+it uses 16x32 blocks. :p). 
+
+Apart from the boundary elements issue, backprop.sac and backprop_no_boundary.sac are
+identical. As we have mentioned earlier, the SAC implementation mimic the Rodinia 
+CUDA implementation by sequentializing the the function calls apart from the first and
+fifth calls to the layer_forward and adjust_weights respectively. To sequentialise the 
+computation, we calls the sequential version of the inline functions, i.e. with _sequential
+postfix. These sequential implementation intentionally uses for-loops to prevent them
+from being cudarized by the backend. However, since the philosophy in sac is that everything
+should be expressed with withloop, this is not a good implementation strategy as they 
+prevent effective withloop folding for the sequential code generation which is crucial
+to achieve good performance. So this suggests another potential improvement to the CUDA
+backend:
+
+POTENTIAL IMPROVEMENT:
+Instead of blindly cudarize all withloops, we might try to work out the size of the withloop
+to assess the benefits of executing this withloops on GPU in comparison to executing it
+on CPU.
+
+As we discussed above, to have good performance for sequential code, NONE of the function
+calls should use the sequential version. Another slight modification we made is to remove
+the assignment array[0] = TOD(1.0) in functions bpnn_layerforward and bpnn_adjust_weights
+as it seems that this assignment causes no effect in backprop.sac and is illegal in 
+backprop_no_boundary.sac (the first element of the arrays are no longer boundary elements
+any more!). This assignment results in the pattern of interleaving sequential code and
+parallel code in the IR. Althought they can be addressed by the expand parallel region
+optimization (-doexpar), the result is two additional single threaded kernels and this
+adds additional kernel launch overheads. 
+
+Another thing worth noting is we have two implementation of the layerforward function: 
+_small and _large. The larger version is a rewrite of the original small version to enable
+better cudarization for large arrays. The small version parallelises the outer most dimension
+which is a X dimension and have the inner withloop iterate across the Y dimension. However,
+since the length of the Y dimension (i.e. 65536) is much larger than the length of the X
+dimension (i.e. 16). This parallelization is not very efficient, leaving a small number 
+of threads each perform a heavy computation. So in the large version, we essentially, swap
+the two withloops so that outer withloop is now the Y dimesnion. This requires a second
+modarray withloop to complete the computation. This large version is what triggers the need
+to implement withloop scalarization for the CUDA partial folding (see the def_genarray case
+if the partial_fold.c in the SAC src directory). Even though the small version is not used
+any more, it exemplifies the case of def_array in partial_fold.c (not in its original form 
+but after WLUR).  
+
+One interesting thing about the performance is that the Rodinia sequential and openmp implementation
+performs much worse than the SAC sequential implementation. This is mainly because of the 
+withloop folding performs the SAC compiler while the for loops in the Rodinia benchmarks 
+cannot be folded automatically.  
+
+The commands to compile the SAC implemeation is in cuda_compile and sac_compile.
+

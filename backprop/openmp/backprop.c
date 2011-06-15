@@ -215,6 +215,7 @@ BPNN *bpnn_create(int n_in, int n_hidden, int n_out)
   return (newnet);
 }
 
+inline
 void bpnn_layerforward(float *l1, float *l2, float **conn, int n1, int n2)
 {
   float sum;
@@ -237,6 +238,7 @@ void bpnn_layerforward(float *l1, float *l2, float **conn, int n1, int n2)
   }
 }
 
+inline
 void bpnn_output_error(float *delta, float *target, float *output, int nj, float *err)  
 {
   int j;
@@ -251,7 +253,7 @@ void bpnn_output_error(float *delta, float *target, float *output, int nj, float
   *err = errsum;
 }
 
-//bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err);  
+inline
 void bpnn_hidden_error(float *delta_h, int nh, float *delta_o, int no, float **who, float *hidden, float *err)
 {
   int j, k;
@@ -270,6 +272,7 @@ void bpnn_hidden_error(float *delta_h, int nh, float *delta_o, int no, float **w
   *err = errsum;
 }
 
+inline
 void bpnn_adjust_weights(float *delta, int ndelta, float *ly, int nly, float **w, float **oldw)
 {
   float new_dw;

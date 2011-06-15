@@ -1,0 +1,11 @@
+* srad
+This benchmark has been converted to SAC. The result of the SAC generated 
+code has been compared with the orginal Rodina version and they seem to match
+quite well (however, due to tiny roundoff errors, there is slight difference).
+Also, to make these two version comparable, we also need to manaully change
+the random function "SACrandom" of SAC to the stdlib.h random function "rand"
+The original Rodinia version has also been modified so we now have two new
+kernels which do not utilise the shared memory at all. The prupose of this
+is to compare to the performance of kernel with and without shared memory on
+the new Fermi architecture, which features hardware managed L1/L2 cache. The
+runtime results seem to show that utilising shared memory is *less* efficient. 

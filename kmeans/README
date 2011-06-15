@@ -1,0 +1,24 @@
+* K-means
+There are three versions of this benchmark, they are in three separate directories:
+openmp, cuda and sac. The program structure of the SAC version is very similar to the
+OpenMP version. In the main computation loop, the for loop to compute new membership
+is converted to WITH-loop. So it will be transformed into CUDA kernels by the compiler.
+The following two for loops, which compute delta reduction and new cluster reduction,
+is left as normal for loops and so they will not be converted into CUDA kernels. The
+SAC generated code is essentially equivalent to the Rodinia CUDA version WITHOUT the
+following macros defined: BLOCK_DELTA_REDUCE(kmenas_cuda.cu), BLOCK_CENTER_REDUCE
+(kmeans_cuda.cu), GPU_DELTA_REDUCTION(kmeans_cuda_kernel.cu) and GPU_NEW_CENTER_REDUCTION
+(kmeans_cuda_kernel.cu). Note that the two *DELTA* macros are used to perform delta
+reduction on GPU and the two *CLUSTER* macros are used to perform new cluster reduction
+on GPU. Initial experimental results show that performing delta reduction on GPU does
+not provide too much performance benefits while performing cluster reduction on GPU
+does improve the performance a lot. There are several issues with the SAC implementation:
+1) We are not able to perform parallel reduction of any kind. So both delta and cluster
+reductions need to be left as they are, i.e. performed on host by for loops. 2) One main
+array are not able to be lifted out of the outmost while loop, i.e. the 2D feature array.
+This is because it is accessed in the WITH-loop computing the new membership array. And 
+it is later used in the for loop for delta reduction. So the current optimization thinks
+that it is accessed on the GPU and host in the same loop and therefore it can not be lifted
+out. However, in this case, it can actually be lifted out because it is read on in both
+the WITH-loop and the for loop, and neither of them change the values in feature array. 
+So the current optimisation needs to be modified to cater for this case.

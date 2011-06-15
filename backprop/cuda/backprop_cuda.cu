@@ -60,16 +60,16 @@ void bpnn_train_cuda(BPNN *net, float *eo, float *eh)
 {
   int in, hid, out;
   float out_err, hid_err;
-  
+  int iter; 
+
   in = net->input_n;
   hid = net->hidden_n;
   out = net->output_n;   
    
-#ifdef GPU  
+#ifdef GPU 
   int m = 0;
   float *input_hidden_cuda;
   float *input_cuda;
-  float *output_hidden_cuda;
   float *partial_sum;
   float *hidden_partial_sum;
   float *hidden_delta_cuda;
@@ -95,81 +95,110 @@ void bpnn_train_cuda(BPNN *net, float *eo, float *eh)
   }
   
   cudaMalloc((void**) &input_cuda, (in + 1) * sizeof(float));
-  cudaMalloc((void**) &output_hidden_cuda, (hid + 1) * sizeof(float));
   cudaMalloc((void**) &input_hidden_cuda, (in + 1) * (hid + 1) * sizeof(float));
   cudaMalloc((void**) &hidden_partial_sum, num_blocks * WIDTH * sizeof(float));
+
+  cudaMalloc((void**) &hidden_delta_cuda, (hid + 1) * sizeof(float));
+  cudaMalloc((void**) &input_prev_weights_cuda, (in + 1) * (hid + 1) * sizeof(float));
 #endif
 
 #ifdef CPU
 #ifdef VERBOSE 
   printf("Performing CPU computation\n");
-#endif
+#endif // VERBOSE
   bpnn_layerforward(net->input_units, net->hidden_units,net->input_weights, in, hid);
-#endif
+#endif // CPU
 
 #ifdef GPU
-
 #ifdef VERBOSE 
   printf("Performing GPU computation\n");
-  //printf("in= %d, hid = %d, numblocks = %d\n", in, hid, num_blocks);
-#endif  
+  printf("in= %d, hid = %d, numblocks = %d\n", in, hid, num_blocks);
+#endif // VERBOSE 
   
   cudaMemcpy(input_cuda, net->input_units, (in + 1) * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(input_hidden_cuda, input_weights_one_dim, (in + 1) * (hid + 1) * sizeof(float), cudaMemcpyHostToDevice);
-
-  my_bpnn_layerforward_CUDA<<< grid, threads >>>(input_cuda, output_hidden_cuda, input_hidden_cuda, hidden_partial_sum, in, hid);
- 
-  cudaThreadSynchronize();
-  
-  cudaError_t error = cudaGetLastError();
-  if (error != cudaSuccess) {
-    printf("bpnn kernel error: %s\n", cudaGetErrorString(error));
-    exit(EXIT_FAILURE);
-  }
-  
-  cudaMemcpy(partial_sum, hidden_partial_sum, num_blocks * WIDTH * sizeof(float), cudaMemcpyDeviceToHost);
-     
-  for (int j = 1; j <= hid; j++) {
-    sum = 0.0;
-    for (int k = 0; k < num_blocks; k++) {	
-      sum += partial_sum[k * hid + j-1] ;
-    }
-    sum += net->input_weights[0][j];
-    net->hidden_units[j] = float(1.0 / (1.0 + exp(-sum)));
-  }
-
-  int i;
-  for( i = 0; i < hid+1; i++) {
-    printf("%f\n", net->hidden_units[i]); 
-  }
-
-#endif
-
-  bpnn_layerforward(net->hidden_units, net->output_units, net->hidden_weights, hid, out);
-  bpnn_output_error(net->output_delta, net->target, net->output_units, out, &out_err);
-  bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err);  
-  bpnn_adjust_weights(net->output_delta, out, net->hidden_units, hid, net->hidden_weights, net->hidden_prev_weights);
-
-#ifdef CPU
-  bpnn_adjust_weights(net->hidden_delta, hid, net->input_units, in, net->input_weights, net->input_prev_weights);
-#endif  
-
-#ifdef GPU
-
-  cudaMalloc((void**) &hidden_delta_cuda, (hid + 1) * sizeof(float));
-  cudaMalloc((void**) &input_prev_weights_cuda, (in + 1) * (hid + 1) * sizeof(float));
-
-  cudaMemcpy(hidden_delta_cuda, net->hidden_delta, (hid + 1) * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(input_prev_weights_cuda, input_weights_prev_one_dim, (in + 1) * (hid + 1) * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(input_hidden_cuda, input_weights_one_dim, (in + 1) * (hid + 1) * sizeof(float), cudaMemcpyHostToDevice);
 
-  bpnn_adjust_weights_cuda<<< grid, threads >>>(hidden_delta_cuda, hid, input_cuda, in, input_hidden_cuda, input_prev_weights_cuda);
+  struct timeval tv1,tv2;
 
-  cudaMemcpy(net->input_units, input_cuda, (in + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-  cudaMemcpy(input_weights_one_dim, input_hidden_cuda, (in + 1) * (hid + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+  for( iter = 0; iter < ITER; iter++) {
+    gettimeofday( &tv1, NULL);
+
+    my_bpnn_layerforward_CUDA<<< grid, threads >>>(input_cuda, input_hidden_cuda, hidden_partial_sum, in, hid);
+   
+    cudaThreadSynchronize();
+   
+/* 
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+      printf("bpnn kernel error: %s\n", cudaGetErrorString(error));
+      exit(EXIT_FAILURE);
+    }
+*/
     
+    cudaMemcpy(partial_sum, hidden_partial_sum, num_blocks * WIDTH * sizeof(float), cudaMemcpyDeviceToHost);
+       
+    for (int j = 1; j <= hid; j++) {
+      sum = 0.0;
+      for (int k = 0; k < num_blocks; k++) {	
+	sum += partial_sum[k * hid + j-1] ;
+      }
+      sum += net->input_weights[0][j];
+      net->hidden_units[j] = float(1.0 / (1.0 + exp(-sum)));
+    }
+
+    #ifdef VERBOSE 
+      int i;
+      for( i = 0; i < hid+1; i++) {
+	printf("%f\n", net->hidden_units[i]); 
+      }
+    #endif // VERBOSE 
+    #endif // GPU
+
+      bpnn_layerforward(net->hidden_units, net->output_units, net->hidden_weights, hid, out);
+      bpnn_output_error(net->output_delta, net->target, net->output_units, out, &out_err);
+      bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err);  
+      bpnn_adjust_weights(net->output_delta, out, net->hidden_units, hid, net->hidden_weights, net->hidden_prev_weights);
+
+    #ifdef CPU
+      bpnn_adjust_weights(net->hidden_delta, hid, net->input_units, in, net->input_weights, net->input_prev_weights);
+    #endif // CPU 
+
+    #ifdef GPU
+
+    cudaMemcpy(hidden_delta_cuda, net->hidden_delta, (hid + 1) * sizeof(float), cudaMemcpyHostToDevice);
+
+    my_bpnn_adjust_weights_cuda<<< grid, threads >>>(hidden_delta_cuda, hid, input_cuda, in, input_hidden_cuda, input_prev_weights_cuda);
+
+    cudaThreadSynchronize();
+
+    gettimeofday( &tv2, NULL);
+    double runtime = ((tv2.tv_sec*1000.0 + tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0 + tv1.tv_usec/1000.0));
+    printf("Back propagation runtime(1 iteration in milliseconds): %f\n", runtime);
+  }
+
+  //cudaMemcpy(net->input_units, input_cuda, (in + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(input_weights_one_dim, input_hidden_cuda, (in + 1) * (hid + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(input_weights_prev_one_dim, input_prev_weights_cuda, (in + 1) * (hid + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+
+#ifdef VERBOSE
+  int j;   
+  for( i = 0; i <= in; i++) {
+    for( j = 0; j <= hid; j++) {
+      printf("%f\n", input_weights_one_dim[i*(hid+1)+j]);
+    }
+    printf("\n"); 
+  }
+
+  for( i = 0; i <= in; i++) {
+    for( j = 0; j <= hid; j++) {
+      printf("%f\n", input_weights_prev_one_dim[i*(hid+1)+j]);
+    }
+    printf("\n"); 
+  }
+#endif // VERBOSE
+
   cudaFree(input_cuda);
-  cudaFree(output_hidden_cuda);
   cudaFree(input_hidden_cuda);
   cudaFree(hidden_partial_sum);
   cudaFree(input_prev_weights_cuda);
@@ -178,8 +207,7 @@ void bpnn_train_cuda(BPNN *net, float *eo, float *eh)
   free(partial_sum);
   free(input_weights_one_dim);
   free(input_weights_prev_one_dim);
-
-#endif   
+#endif // GPU  
 }
 
 void load( BPNN *net)
@@ -207,14 +235,17 @@ void backprop_face()
 #ifdef VERBOSE 
   printf("Input layer size : %d\n", layer_size);
 #endif
+
   load(net);
 
   //entering the training kernel, only one iteration
 #ifdef VERBOSE 
   printf("Starting training kernel\n");
 #endif
+
   bpnn_train_cuda(net, &out_err, &hid_err);
   bpnn_free(net);
+
 #ifdef VERBOSE 
   printf("Training done\n");
 #endif
@@ -223,15 +254,19 @@ void backprop_face()
 int setup(int argc, char *argv[])
 {
   int seed;
-
-  if (argc!=2){
+/*
+  if( argc != 2){
     fprintf(stderr, "usage: backprop <num of input elements>\n");
     exit(0);
   }
+*/
+  /* Set layer size to constant so that it's now 'AKS' 
+   * to make it fair to compare with the AKS SAC 
+   * implementation */
+  //layer_size = atoi(argv[1]);
+  layer_size = 65536;
 
-  layer_size = atoi(argv[1]);
-
-  if (layer_size%16!=0){
+  if( layer_size % 16 != 0){
     fprintf(stderr, "The number of input points must be divided by 16\n");
     exit(0);
   }

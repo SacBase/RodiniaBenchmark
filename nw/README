@@ -1,0 +1,30 @@
+* NW
+There are three versions of this benchmark: needle.cu, needle.cpp and needle.sac.
+They are the orginal Rodinia CUDA and OpenMP versions and the converted SAC version.
+It seems that the orginal OpenMP version downloaded is slightly incorrect when 
+computing the upper left coner and lower right coner, i.e. they do not conver all
+elements. So this has been fixed and the results now match the results of the 
+original unchanged Rodinia CUDA version. The orginal CUDA version has also been
+augmented with two new kernels (computing upper left coner and lower right coner) 
+without using shared memory (to use these two kernels, define the PLAIN macro).
+Initial runtime result shows that the shared version is slghtly better. Because 
+of this, the CUDA backend of our SAC compiler should also consider using shared
+memory if possible (however, it is not using it yet). The SAC implementation of
+NW is a bit ugly due to the difficulty of expressing diagonal parallelism in SAC.
+In the current implementation, we use one WITH-loop for each upper left coner and
+lower right coner computation (See the two for loops in the program). Within the
+each WITH-loop, each iteration determines if it is the one on the diagonal. If it
+is, the performs the maxumum computation (See the if branch). Otherwise, it just 
+selects the corresponding element without any modifications (See the else branch).    
+Perforamnce of the SAC generated CUDA code has not been compared with the original
+Rodinia CUDA code. However, based on the SAC implementation, the SAC gerneted code
+will definitely be much slower than the Rodinia version. This is not because of 
+the utilization of shared memory, but because in SAC implementation, we lanuch 
+5 kernels for each diagnal strip (due to the way WITH-loop are transformed within
+the compiler). So the runtime will not be very good.
+Another thing to note is that the random function used in the benchmarks. The
+SAC random function generates minus value. So when used these mius value to index
+another array, erroueous reuslt will occur. So currently, to compare the result
+with orginal Rodinia benchmarks (CUDA or OpenMP), for the SAC generated code 
+(Sequential or CUDA), we need to manually change the SACrandom functions to rand().
+After that, all versions produce the same results.

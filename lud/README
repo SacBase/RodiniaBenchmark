@@ -1,0 +1,38 @@
+-base
+  Non-optimized, non-paralleled implementation. It is considered as a baseline implementation to be compared with OpenMP and CUDA implementations. 
+
+-common
+  Common functions used in all implementations.
+
+-cuda
+  An blocked implementation optimized for CUDA
+
+-data
+  Some sample input matrices. 
+  
+-omp
+  An paralleled implementation with OpenMP.
+
+-tools
+  Tools to generate input matrix with random number.
+
+* lud
+This benchmark has been converted into SAC. The SAC implementation is basicaly a direct
+translation of the OpenMP implmentation, i.e. OpenMP parallel for loops have been converted
+into WITH-lo ps. The Rodinia implementation uses a blocked version and breaks the 
+computation into thress kernels. During each iteration of the blocked for loop, one kernel
+computes one diagonal block, then a second kernel computes both the row and column 
+perimeters (also in blocks) orginating from the just-computed disgonal block. Finally, 
+a third kernel computes all internal blocks. This computation pattern preserves the data
+dependencies while accumulates result over time. Also each kernel employs shared memory
+to optimized data reuse. For the purpose of comparision, each kernel is also provided 
+with a version without shared memory. Initial runtime result shows that the non-shared 
+memory version is almost twice slower than the shared memory version. One critical 
+hand optimization emploied by this benchmark is the blocked outermost for loop. However,
+this is very difficult to specified in SAC at the moment. The result of that is the SAC
+generated code executes at least 16 times more kernels than the Rodinia CUDA version 
+(the blocking factor). Moreover, each WITH-loop has several partition (even thought most
+of them just copy data from one array to another array), each partition is generated as
+a kernel, the total number of kernels is even larger. The result of such inefficiency 
+is that the SAC generated CUDA version is almost 30 times slower than the Rodinia shared
+memory CUDA version.  

@@ -48,6 +48,7 @@ DBL, int[Nparticles] randn(int[Nparticles] seed, int index)
   return( sqrt(rt)*cosine, seed);
 }
 
+inline
 DBL roundDouble(DBL value)
 {
   res = TOD(0.0);
@@ -280,12 +281,33 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
      * draws sample from motion model (random walk). The only prior information
      * is that the object moves 2x as fast as in the y direction
      */
-    for(x = 0; x < Nparticles; x++) {
-      tmp, seed = randn( seed, x);
-      arrayX[x] = arrayX[x] + TOD(1.0) + TOD(5.0)*tmp;
-      tmp, seed = randn( seed, x);
-      arrayY[x] = arrayY[x] + TOD(-2.0) + TOD(2.0)*tmp;
-    }
+    arrayX, seed = with {
+                     ( [0] <= iv=[x] < [Nparticles]) {
+                       num = A * seed[x] + C;
+                       new_seed = num % M;
+                       uu = fabs(TOD(new_seed)/TOD(M));
+                       num = A * new_seed + C;
+                       new_seed = num % M;
+                       vv = fabs(TOD(new_seed)/TOD(M));
+                       cosine = cos(TOD(2.0)*PI*vv);
+                       rt = TOD(-2.0)*log(uu);
+                       res = arrayX[x] + TOD(1.0) + TOD(5.0)*sqrt(rt)*cosine;
+                     }:(res, new_seed);
+                   }:( modarray( arrayX), modarray( seed));
+
+    arrayY, seed = with {
+                     ( [0] <= iv=[x] < [Nparticles]) {
+                       num = A * seed[x] + C;
+                       new_seed = num % M;
+                       uu = fabs(TOD(new_seed)/TOD(M));
+                       num = A * new_seed + C;
+                       new_seed = num % M;
+                       vv = fabs(TOD(new_seed)/TOD(M));
+                       cosine = cos(TOD(2.0)*PI*vv);
+                       rt = TOD(-2.0)*log(uu);
+                       res = arrayY[x] + TOD(-2.0) + TOD(2.0)*sqrt(rt)*cosine;
+                     }:(res, new_seed);
+                   }:( modarray( arrayY), modarray( seed));
 
     likelihood = with {
                    ([0] <= iv=[x] < [Nparticles]) {
@@ -312,10 +334,10 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
                 }:res;
               }:modarray(weights);
 
-    sumWeights = TOD(0.0);
-    for(x = 0; x < Nparticles; x++){
-      sumWeights += weights[x];
-    }
+    sumWeights = with {
+                   ( [0] <= iv=[x] < [Nparticles]):weights[x];
+                 }:fold(+, TOD(0.0));
+     
 
     weights = with {
                 ([0] <= iv=[x] < [Nparticles]) {
@@ -325,7 +347,6 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
 
     xe = TOD(0.0);
     ye = TOD(0.0);
-    /* estimate the object location by expected values */
     for(x = 0; x < Nparticles; x++){
       xe += arrayX[x] * weights[x];
       ye += arrayY[x] * weights[x];
@@ -337,7 +358,7 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
     printf("%lf\n", distance);
 
     CDF[0] = weights[0];
-    for(x = 1; x < Nparticles; x++){
+    for(x = 1; x < Nparticles; x++) {
       CDF[x] = weights[x] + CDF[x-1];
     }
 
@@ -349,32 +370,24 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
             res = u1 + TOD(x)/(TOD(Nparticles));
           }:res;
         }:modarray(u);   
- 
+
+/* 
     for(j = 0; j < Nparticles; j++){
       i = findIndex(CDF, Nparticles, u[j]);
       xj[j] = arrayX[i];
-    }
-
-    for(j = 0; j < Nparticles; j++){
-      i = findIndex(CDF, Nparticles, u[j]);
       yj[j] = arrayY[i];
     }
-
-/*
-    xj = with {
-          ([0] <= iv=[x] < [Nparticles]) {
-            i = findIndex(CDF, Nparticles, u[x]);
-            res = arrayX[i];
-          }:res;
-        }:modarray(xj); 
-
-    yj = with {
-          ([0] <= iv=[x] < [Nparticles]) {
-            i = findIndex(CDF, Nparticles, u[x]);
-            res = arrayY[i];
-          }:res;
-        }:modarray(yj); 
 */
+
+    xj, yj = with {
+          ([0] <= iv=[j] < [Nparticles]) {
+            i = findIndex(CDF, Nparticles, u[j]);
+            res1 = arrayX[i];
+            res2 = arrayY[i];
+          }:(res1, res2);
+        }:( modarray(xj), modarray(yj)); 
+
+
     /* reassign arrayX and arrayY */
     arrayX = xj;
     arrayY = yj;
@@ -385,6 +398,19 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
                 }:res;
               }:modarray(weights);
   }
+/*
+  xe = TOD(0.0);
+  ye = TOD(0.0);
+  for(x = 0; x < Nparticles; x++){
+    xe += arrayX[x] * weights[x];
+    ye += arrayY[x] * weights[x];
+  }
+
+  printf("XE: %lf\n", xe);
+  printf("YE: %lf\n", ye);
+  distance = sqrt( pow(TOD(xe-TOD(IszY/2)),TOD(2.0)) + pow(TOD(ye-TOD(IszX/2)),TOD(2.0)));
+  printf("%lf\n", distance);
+*/
 }
 
 int main()

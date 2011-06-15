@@ -11,7 +11,7 @@
 #define ETA 0.3       //eta value
 #define MOMENTUM 0.3  //momentum value
 #define NUM_THREAD 4  //OpenMP threads
-
+#define ITER 20
 
 typedef struct {
   int input_n;                  /* number of input units */
