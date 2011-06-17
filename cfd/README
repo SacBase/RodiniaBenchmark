@@ -1,3 +1,4 @@
+
 * cfd
 This benchmark has been converted to SAC (euler3d.sac). The result of the SAC 
 generated CUDA code has been compared with the orginal Rodina version and the SAC 
@@ -5,13 +6,17 @@ generated sequential code. The results match for most of the data, however, when
 the result is too small, e.g. 10^(-17), the results from CUDA just shows 0 while
 the result from the other two can still be displayed as some number to the power
 of -17. This could be due to the difference in architectures but it has not
-been investigated further. Currently we only have double versions, they are 
+been investigated further.
+
+ Currently we only have double versions, they are 
 euler3d.sac, euler3d_cpu_double.cpp and euler3d_gpu_double.cu. Note that to 
 better utilise the GPU off chip memory bandwidth, the major arrays in the program
 has been transformed from row-wise to column-wise. For example, arrays "varaibles" 
 and "fluxes" were orginally of shape [SIZE, NVAR]. In the Rodinia CUDA version,
 they have been changed to shape [NVAR, SIZE]. The same change has also been
-made in the SAC version. In the Rodinia CUDA version, the major kernel "compute_flux"
+made in the SAC version. 
+
+In the Rodinia CUDA version, the major kernel "compute_flux"
 is invoked with a 1D thread grid along the X dimension. Each thread essentially
 computes 5 different elements along the same column of array "fluxes"(Y dimension). 
 These five elements are: density, momentum_x, momentum_y, momentum_z and density_engery.
@@ -25,11 +30,13 @@ because a lot of computation is common for all 5 rows, separating them loses the
 opportunity to reuse data because data in cache is not persistent across different
 kerenl invocations. This is not an easy problem and further discssion is needed 
 with more experienced SAC developers.  
+
 Finally, apart from transforming the arrays layout, the Rodinia verions utilise 
 constant memory to store small arrays. We have NOT yet written a version WITHOUT
 such constant memory optimzation. However, this should be fairly trivial. 
 Not runtime comparision has been made between any versions of this benchmarks. This
 will be performed later. 
+
 All input files are in the ./input directory. Files with names fvcorr.domn.* are 
 inputs to the Rodinia CUDA and OpenMP version. Files with names sac_input_* are inputs
 to the SAC versions. Here * represent the size (number of rows) of the input. The

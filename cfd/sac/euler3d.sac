@@ -1,0 +1,841 @@
+use StdIO: all;
+use Array: all;
+use Math:  all;
+
+#ifdef FLOAT
+#define DBL float
+#define TOD tof
+#else 
+#define DBL double
+#define TOD tod
+#endif
+
+#define SIZE 97046
+
+#ifndef ITER
+#define ITER 10 
+#endif
+
+#define NDIM 3
+#define NNB 4
+
+#define RK 3	// 3rd order RK
+#define ff_mach (TOD(1.2))
+#define deg_angle_of_attack (TOD(0.0))
+#define GAMMA (TOD(1.4))
+
+#define VAR_DENSITY 0
+#define VAR_MOMENTUM  1
+#define VAR_DENSITY_ENERGY (VAR_MOMENTUM+NDIM) // 4
+#define NVAR (VAR_DENSITY_ENERGY+1)
+
+inline DBL[3] compute_velocity( DBL density, DBL[3] momentum)
+{
+  velocity = [momentum[0] / density, momentum[1] / density, momentum[2] / density];
+
+  return( velocity);
+}
+
+inline DBL compute_speed_sqd( DBL[3] velocity)
+{
+  res = velocity[0]*velocity[0]+velocity[1]*velocity[1]+velocity[2]*velocity[2];
+  return( res);
+}
+
+inline DBL compute_pressure( DBL density, DBL density_energy, DBL speed_sqd)
+{
+  res = (GAMMA-TOD(1.0))*(density_energy-TOD(0.5)*density*speed_sqd);
+  return( res);
+}
+
+inline DBL compute_speed_of_sound( DBL density, DBL pressure)
+{
+  res = sqrt(GAMMA*pressure/density);
+  return( res);
+}
+
+inline
+DBL[3], DBL[3], DBL[3], DBL[3]
+compute_flux_contribution( DBL ff_variable_density,
+                           DBL[3] momentum,
+                           DBL density_energy, DBL pressure, 
+                           DBL[3] velocity)
+{
+  fc_momentum_x = [ velocity[0]*momentum[0] + pressure,
+                    velocity[0]*momentum[1],
+                    velocity[0]*momentum[2] ]; 
+  
+  fc_momentum_y = [ fc_momentum_x[1],
+                    velocity[1]*momentum[1] + pressure,
+                    velocity[1]*momentum[2] ];
+
+  fc_momentum_z = [ fc_momentum_x[2],
+                    fc_momentum_y[2],
+                    velocity[2]*momentum[2] + pressure ];
+
+  de_p = density_energy+pressure;
+  fc_density_energy = [ velocity[0]*de_p, velocity[1]*de_p, velocity[2]*de_p ];  
+
+  return( fc_momentum_x, fc_momentum_y, fc_momentum_z, fc_density_energy);    
+}
+
+DBL[SIZE] compute_step_factor( DBL[5,SIZE] variables, DBL[SIZE] areas)
+{
+  step_factors = with {
+                   ( [0] <= iv=[i] < [SIZE]) {
+                     density = variables[VAR_DENSITY, i];
+	             momentum_x = variables[(VAR_MOMENTUM+0), i];
+	             momentum_y = variables[(VAR_MOMENTUM+1), i];
+	             momentum_z = variables[(VAR_MOMENTUM+2), i];
+                     momentum = [momentum_x, momentum_y, momentum_z];            
+                     density_energy = variables[VAR_DENSITY_ENERGY, i];
+
+	             velocity_x = momentum_x/density;
+	             velocity_y = momentum_y/density;
+	             velocity_z = momentum_z/density;              
+                     velocity = [velocity_x, velocity_y, velocity_z];
+
+                     speed_sqd = compute_speed_sqd(velocity);
+                     pressure = compute_pressure( density, density_energy, speed_sqd); 
+                     speed_of_sound = compute_speed_of_sound( density, pressure);          
+
+                     res = TOD(0.5) / (sqrt(areas[i]) * (sqrt(speed_sqd) + speed_of_sound));
+                   }:res;
+                 }:genarray([SIZE]);
+
+  return( step_factors);
+}
+
+DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements, 
+                         DBL[SIZE,NNB,NDIM] normals, DBL[5,SIZE] variables, DBL[5] ff_variable,
+                         DBL[3] ff_flux_contribution_momentum_x, DBL[3] ff_flux_contribution_momentum_y, 
+                         DBL[3] ff_flux_contribution_momentum_z, DBL[3] ff_flux_contribution_density_energy)
+{
+  smoothing_coefficient = TOD(0.2);
+/*
+  fluxes = with {
+             ( [0,0] <= iv=[j,i] < [NVAR, SIZE]) {
+	       density_i = variables[VAR_DENSITY, i];
+
+	       momentum_i_x = variables[(VAR_MOMENTUM+0), i];
+	       momentum_i_y = variables[(VAR_MOMENTUM+1), i];
+	       momentum_i_z = variables[(VAR_MOMENTUM+2), i];
+               momentum_i = [momentum_i_x, momentum_i_y, momentum_i_z];
+
+	       density_energy_i = variables[VAR_DENSITY_ENERGY, i];
+ 
+	       velocity_i_x = momentum_i_x/density_i;
+	       velocity_i_y = momentum_i_y/density_i;
+	       velocity_i_z = momentum_i_z/density_i;
+               velocity_i = [velocity_i_x, velocity_i_y, velocity_i_z];
+
+               speed_sqd_i = compute_speed_sqd(velocity_i);
+               speed_i = sqrt(speed_sqd_i);
+               pressure_i = compute_pressure( density_i, density_energy_i, speed_sqd_i); 
+               speed_of_sound_i = compute_speed_of_sound( density_i, pressure_i); 
+               
+               flux_contribution_i_momentum_x, flux_contribution_i_momentum_y, 
+               flux_contribution_i_momentum_z, flux_contribution_i_density_energy
+                 =
+               compute_flux_contribution( density_i,
+                                          momentum_i,
+                                          density_energy_i, pressure_i, 
+                                          velocity_i);
+
+               flux_i_density = TOD(0.0f);	
+               flux_i_momentum_x = TOD(0.0f);
+	       flux_i_momentum_y = TOD(0.0f);
+	       flux_i_momentum_z = TOD(0.0f);
+	       flux_i_density_energy = TOD(0.0f);
+
+	       for( j = 0; j < NNB; j++) { 
+                 nb = elements_surrounding_elements[j, i];
+		 normal_x = normals[i,j,0];
+		 normal_y = normals[i,j,1];
+		 normal_z = normals[i,j,2];                
+		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
+
+                 if( nb >= 0) { 
+		   density_nb =        variables[VAR_DENSITY, nb];
+		   momentum_nb_x =     variables[(VAR_MOMENTUM+0), nb];
+		   momentum_nb_y =     variables[(VAR_MOMENTUM+1), nb];
+		   momentum_nb_z =     variables[(VAR_MOMENTUM+2), nb];
+                   momentum_nb = [momentum_nb_x, momentum_nb_y, momentum_nb_z];
+		   density_energy_nb = variables[VAR_DENSITY_ENERGY, nb];
+
+		   velocity_nb_x = momentum_nb_x/density_nb;
+		   velocity_nb_y = momentum_nb_y/density_nb;
+		   velocity_nb_z = momentum_nb_z/density_nb;
+                   velocity_nb = [velocity_nb_x, velocity_nb_y, velocity_nb_z];
+
+                   speed_sqd_nb = compute_speed_sqd(velocity_nb);
+                   pressure_nb = compute_pressure( density_nb, density_energy_nb, speed_sqd_nb); 
+                   speed_of_sound_nb = compute_speed_of_sound( density_nb, pressure_nb);             
+                  
+                   flux_contribution_nb_momentum_x, flux_contribution_nb_momentum_y, 
+                   flux_contribution_nb_momentum_z, flux_contribution_nb_density_energy
+                     =
+                   compute_flux_contribution( density_nb,
+                                              momentum_nb,
+                                              density_energy_nb, pressure_nb, 
+                                              velocity_nb);
+
+		   factor = -normal_len*smoothing_coefficient*TOD(0.5)*(speed_i + sqrt(speed_sqd_nb) + speed_of_sound_i + speed_of_sound_nb);
+		   flux_i_density += factor*(density_i-density_nb);
+		   flux_i_density_energy += factor*(density_energy_i-density_energy_nb);
+		   flux_i_momentum_x += factor*(momentum_i_x-momentum_nb_x);
+		   flux_i_momentum_y += factor*(momentum_i_y-momentum_nb_y);
+		   flux_i_momentum_z += factor*(momentum_i_z-momentum_nb_z);
+
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_density += factor*(momentum_nb_x+momentum_i_x);
+		   flux_i_density_energy += factor*(flux_contribution_nb_density_energy[0]+flux_contribution_i_density_energy[0]);
+		   flux_i_momentum_x += factor*(flux_contribution_nb_momentum_x[0]+flux_contribution_i_momentum_x[0]);
+		   flux_i_momentum_y += factor*(flux_contribution_nb_momentum_y[0]+flux_contribution_i_momentum_y[0]);
+		   flux_i_momentum_z += factor*(flux_contribution_nb_momentum_z[0]+flux_contribution_i_momentum_z[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_density += factor*(momentum_nb_y+momentum_i_y);
+		   flux_i_density_energy += factor*(flux_contribution_nb_density_energy[1]+flux_contribution_i_density_energy[1]);
+		   flux_i_momentum_x += factor*(flux_contribution_nb_momentum_x[1]+flux_contribution_i_momentum_x[1]);
+		   flux_i_momentum_y += factor*(flux_contribution_nb_momentum_y[1]+flux_contribution_i_momentum_y[1]);
+		   flux_i_momentum_z += factor*(flux_contribution_nb_momentum_z[1]+flux_contribution_i_momentum_z[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_density += factor*(momentum_nb_z+momentum_i_z);
+		   flux_i_density_energy += factor*(flux_contribution_nb_density_energy[2]+flux_contribution_i_density_energy[2]);
+		   flux_i_momentum_x += factor*(flux_contribution_nb_momentum_x[2]+flux_contribution_i_momentum_x[2]);
+		   flux_i_momentum_y += factor*(flux_contribution_nb_momentum_y[2]+flux_contribution_i_momentum_y[2]);
+		   flux_i_momentum_z += factor*(flux_contribution_nb_momentum_z[2]+flux_contribution_i_momentum_z[2]);
+		 }
+		 else if(nb == -1) {  
+		   flux_i_momentum_x += normal_x*pressure_i;
+		   flux_i_momentum_y += normal_y*pressure_i;
+		   flux_i_momentum_z += normal_z*pressure_i;
+		 }
+		 else if(nb == -2) {  
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_density += factor*(ff_variable[VAR_MOMENTUM+0]+momentum_i_x);
+		   flux_i_density_energy += factor*(ff_flux_contribution_density_energy[0]+flux_contribution_i_density_energy[0]);
+		   flux_i_momentum_x += factor*(ff_flux_contribution_momentum_x[0] + flux_contribution_i_momentum_x[0]);
+		   flux_i_momentum_y += factor*(ff_flux_contribution_momentum_y[0] + flux_contribution_i_momentum_y[0]);
+		   flux_i_momentum_z += factor*(ff_flux_contribution_momentum_z[0] + flux_contribution_i_momentum_z[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_density += factor*(ff_variable[VAR_MOMENTUM+1]+momentum_i_y);
+		   flux_i_density_energy += factor*(ff_flux_contribution_density_energy[1]+flux_contribution_i_density_energy[1]);
+		   flux_i_momentum_x += factor*(ff_flux_contribution_momentum_x[1] + flux_contribution_i_momentum_x[1]);
+		   flux_i_momentum_y += factor*(ff_flux_contribution_momentum_y[1] + flux_contribution_i_momentum_y[1]);
+		   flux_i_momentum_z += factor*(ff_flux_contribution_momentum_z[1] + flux_contribution_i_momentum_z[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_density += factor*(ff_variable[VAR_MOMENTUM+2]+momentum_i_z);
+		   flux_i_density_energy += factor*(ff_flux_contribution_density_energy[2]+flux_contribution_i_density_energy[2]);
+		   flux_i_momentum_x += factor*(ff_flux_contribution_momentum_x[2] + flux_contribution_i_momentum_x[2]);
+		   flux_i_momentum_y += factor*(ff_flux_contribution_momentum_y[2] + flux_contribution_i_momentum_y[2]);
+		   flux_i_momentum_z += factor*(ff_flux_contribution_momentum_z[2] + flux_contribution_i_momentum_z[2]);
+                 }
+	       }
+
+               res = TOD(0.0);
+               if( j == 0) {
+                 res = flux_i_density;
+               }
+               else if( j == 1){
+                 res = flux_i_momentum_x;
+               }
+               else if( j == 2){
+                 res = flux_i_momentum_y;
+               }
+               else if( j == 3){
+                 res = flux_i_momentum_z;
+               }
+               else if( j == 4){
+                 res = flux_i_density_energy;
+               }
+             }:res;
+           }:genarray([NVAR,SIZE]);
+*/
+  fluxes = with {
+             ( [0,0] <= iv=[j,i] < [1, SIZE]) {
+	       density_i = variables[VAR_DENSITY, i];
+
+	       momentum_i_x = variables[(VAR_MOMENTUM+0), i];
+	       momentum_i_y = variables[(VAR_MOMENTUM+1), i];
+	       momentum_i_z = variables[(VAR_MOMENTUM+2), i];
+               momentum_i = [momentum_i_x, momentum_i_y, momentum_i_z];
+
+	       density_energy_i = variables[VAR_DENSITY_ENERGY, i];
+ 
+	       velocity_i_x = momentum_i_x/density_i;
+	       velocity_i_y = momentum_i_y/density_i;
+	       velocity_i_z = momentum_i_z/density_i;
+               velocity_i = [velocity_i_x, velocity_i_y, velocity_i_z];
+
+               speed_sqd_i = compute_speed_sqd(velocity_i);
+               speed_i = sqrt(speed_sqd_i);
+               pressure_i = compute_pressure( density_i, density_energy_i, speed_sqd_i); 
+               speed_of_sound_i = compute_speed_of_sound( density_i, pressure_i); 
+               
+               flux_contribution_i_momentum_x, flux_contribution_i_momentum_y, 
+               flux_contribution_i_momentum_z, flux_contribution_i_density_energy
+                 =
+               compute_flux_contribution( density_i,
+                                          momentum_i,
+                                          density_energy_i, pressure_i, 
+                                          velocity_i);
+
+               flux_i_density = TOD(0.0f);	
+               flux_i_momentum_x = TOD(0.0f);
+	       flux_i_momentum_y = TOD(0.0f);
+	       flux_i_momentum_z = TOD(0.0f);
+	       flux_i_density_energy = TOD(0.0f);
+
+	       for( j = 0; j < NNB; j++) { 
+                 nb = elements_surrounding_elements[j, i];
+		 normal_x = normals[i,j,0];
+		 normal_y = normals[i,j,1];
+		 normal_z = normals[i,j,2];                
+		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
+
+                 if( nb >= 0) { 
+		   density_nb =        variables[VAR_DENSITY, nb];
+		   momentum_nb_x =     variables[(VAR_MOMENTUM+0), nb];
+		   momentum_nb_y =     variables[(VAR_MOMENTUM+1), nb];
+		   momentum_nb_z =     variables[(VAR_MOMENTUM+2), nb];
+                   momentum_nb = [momentum_nb_x, momentum_nb_y, momentum_nb_z];
+		   density_energy_nb = variables[VAR_DENSITY_ENERGY, nb];
+
+		   velocity_nb_x = momentum_nb_x/density_nb;
+		   velocity_nb_y = momentum_nb_y/density_nb;
+		   velocity_nb_z = momentum_nb_z/density_nb;
+                   velocity_nb = [velocity_nb_x, velocity_nb_y, velocity_nb_z];
+
+                   speed_sqd_nb = compute_speed_sqd(velocity_nb);
+                   pressure_nb = compute_pressure( density_nb, density_energy_nb, speed_sqd_nb); 
+                   speed_of_sound_nb = compute_speed_of_sound( density_nb, pressure_nb);             
+                  
+                   flux_contribution_nb_momentum_x, flux_contribution_nb_momentum_y, 
+                   flux_contribution_nb_momentum_z, flux_contribution_nb_density_energy
+                     =
+                   compute_flux_contribution( density_nb,
+                                              momentum_nb,
+                                              density_energy_nb, pressure_nb, 
+                                              velocity_nb);
+
+		   factor = -normal_len*smoothing_coefficient*TOD(0.5)*(speed_i + sqrt(speed_sqd_nb) + speed_of_sound_i + speed_of_sound_nb);
+		   flux_i_density += factor*(density_i-density_nb);
+
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_density += factor*(momentum_nb_x+momentum_i_x);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_density += factor*(momentum_nb_y+momentum_i_y);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_density += factor*(momentum_nb_z+momentum_i_z);
+		 }
+		 else if(nb == -1) {  
+		 }
+		 else if(nb == -2) {  
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_density += factor*(ff_variable[VAR_MOMENTUM+0]+momentum_i_x);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_density += factor*(ff_variable[VAR_MOMENTUM+1]+momentum_i_y);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_density += factor*(ff_variable[VAR_MOMENTUM+2]+momentum_i_z);
+                 }
+	       }
+             }:flux_i_density;
+             ( [1,0] <= iv=[j,i] < [2, SIZE]) {
+	       density_i = variables[VAR_DENSITY, i];
+
+	       momentum_i_x = variables[(VAR_MOMENTUM+0), i];
+	       momentum_i_y = variables[(VAR_MOMENTUM+1), i];
+	       momentum_i_z = variables[(VAR_MOMENTUM+2), i];
+               momentum_i = [momentum_i_x, momentum_i_y, momentum_i_z];
+
+	       density_energy_i = variables[VAR_DENSITY_ENERGY, i];
+ 
+	       velocity_i_x = momentum_i_x/density_i;
+	       velocity_i_y = momentum_i_y/density_i;
+	       velocity_i_z = momentum_i_z/density_i;
+               velocity_i = [velocity_i_x, velocity_i_y, velocity_i_z];
+
+               speed_sqd_i = compute_speed_sqd(velocity_i);
+               speed_i = sqrt(speed_sqd_i);
+               pressure_i = compute_pressure( density_i, density_energy_i, speed_sqd_i); 
+               speed_of_sound_i = compute_speed_of_sound( density_i, pressure_i); 
+               
+               flux_contribution_i_momentum_x, flux_contribution_i_momentum_y, 
+               flux_contribution_i_momentum_z, flux_contribution_i_density_energy
+                 =
+               compute_flux_contribution( density_i,
+                                          momentum_i,
+                                          density_energy_i, pressure_i, 
+                                          velocity_i);
+
+               flux_i_density = TOD(0.0f);	
+               flux_i_momentum_x = TOD(0.0f);
+	       flux_i_momentum_y = TOD(0.0f);
+	       flux_i_momentum_z = TOD(0.0f);
+	       flux_i_density_energy = TOD(0.0f);
+
+	       for( j = 0; j < NNB; j++) { 
+                 nb = elements_surrounding_elements[j, i];
+		 normal_x = normals[i,j,0];
+		 normal_y = normals[i,j,1];
+		 normal_z = normals[i,j,2];                
+		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
+
+                 if( nb >= 0) { 
+		   density_nb =        variables[VAR_DENSITY, nb];
+		   momentum_nb_x =     variables[(VAR_MOMENTUM+0), nb];
+		   momentum_nb_y =     variables[(VAR_MOMENTUM+1), nb];
+		   momentum_nb_z =     variables[(VAR_MOMENTUM+2), nb];
+                   momentum_nb = [momentum_nb_x, momentum_nb_y, momentum_nb_z];
+		   density_energy_nb = variables[VAR_DENSITY_ENERGY, nb];
+
+		   velocity_nb_x = momentum_nb_x/density_nb;
+		   velocity_nb_y = momentum_nb_y/density_nb;
+		   velocity_nb_z = momentum_nb_z/density_nb;
+                   velocity_nb = [velocity_nb_x, velocity_nb_y, velocity_nb_z];
+
+                   speed_sqd_nb = compute_speed_sqd(velocity_nb);
+                   pressure_nb = compute_pressure( density_nb, density_energy_nb, speed_sqd_nb); 
+                   speed_of_sound_nb = compute_speed_of_sound( density_nb, pressure_nb);             
+                  
+                   flux_contribution_nb_momentum_x, flux_contribution_nb_momentum_y, 
+                   flux_contribution_nb_momentum_z, flux_contribution_nb_density_energy
+                     =
+                   compute_flux_contribution( density_nb,
+                                              momentum_nb,
+                                              density_energy_nb, pressure_nb, 
+                                              velocity_nb);
+
+		   factor = -normal_len*smoothing_coefficient*TOD(0.5)*(speed_i + sqrt(speed_sqd_nb) + speed_of_sound_i + speed_of_sound_nb);
+		   flux_i_momentum_x += factor*(momentum_i_x-momentum_nb_x);
+
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_momentum_x += factor*(flux_contribution_nb_momentum_x[0]+flux_contribution_i_momentum_x[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_momentum_x += factor*(flux_contribution_nb_momentum_x[1]+flux_contribution_i_momentum_x[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_momentum_x += factor*(flux_contribution_nb_momentum_x[2]+flux_contribution_i_momentum_x[2]);
+		 }
+		 else if(nb == -1) {  
+		   flux_i_momentum_x += normal_x*pressure_i;
+		 }
+		 else if(nb == -2) {  
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_momentum_x += factor*(ff_flux_contribution_momentum_x[0] + flux_contribution_i_momentum_x[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_momentum_x += factor*(ff_flux_contribution_momentum_x[1] + flux_contribution_i_momentum_x[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_momentum_x += factor*(ff_flux_contribution_momentum_x[2] + flux_contribution_i_momentum_x[2]);
+                 }
+	       }
+             }:flux_i_momentum_x;
+             ( [2,0] <= iv=[j,i] < [3, SIZE]) {
+	       density_i = variables[VAR_DENSITY, i];
+
+	       momentum_i_x = variables[(VAR_MOMENTUM+0), i];
+	       momentum_i_y = variables[(VAR_MOMENTUM+1), i];
+	       momentum_i_z = variables[(VAR_MOMENTUM+2), i];
+               momentum_i = [momentum_i_x, momentum_i_y, momentum_i_z];
+
+	       density_energy_i = variables[VAR_DENSITY_ENERGY, i];
+ 
+	       velocity_i_x = momentum_i_x/density_i;
+	       velocity_i_y = momentum_i_y/density_i;
+	       velocity_i_z = momentum_i_z/density_i;
+               velocity_i = [velocity_i_x, velocity_i_y, velocity_i_z];
+
+               speed_sqd_i = compute_speed_sqd(velocity_i);
+               speed_i = sqrt(speed_sqd_i);
+               pressure_i = compute_pressure( density_i, density_energy_i, speed_sqd_i); 
+               speed_of_sound_i = compute_speed_of_sound( density_i, pressure_i); 
+               
+               flux_contribution_i_momentum_x, flux_contribution_i_momentum_y, 
+               flux_contribution_i_momentum_z, flux_contribution_i_density_energy
+                 =
+               compute_flux_contribution( density_i,
+                                          momentum_i,
+                                          density_energy_i, pressure_i, 
+                                          velocity_i);
+
+               flux_i_density = TOD(0.0f);	
+               flux_i_momentum_x = TOD(0.0f);
+	       flux_i_momentum_y = TOD(0.0f);
+	       flux_i_momentum_z = TOD(0.0f);
+	       flux_i_density_energy = TOD(0.0f);
+
+	       for( j = 0; j < NNB; j++) { 
+                 nb = elements_surrounding_elements[j, i];
+		 normal_x = normals[i,j,0];
+		 normal_y = normals[i,j,1];
+		 normal_z = normals[i,j,2];                
+		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
+
+                 if( nb >= 0) { 
+		   density_nb =        variables[VAR_DENSITY, nb];
+		   momentum_nb_x =     variables[(VAR_MOMENTUM+0), nb];
+		   momentum_nb_y =     variables[(VAR_MOMENTUM+1), nb];
+		   momentum_nb_z =     variables[(VAR_MOMENTUM+2), nb];
+                   momentum_nb = [momentum_nb_x, momentum_nb_y, momentum_nb_z];
+		   density_energy_nb = variables[VAR_DENSITY_ENERGY, nb];
+
+		   velocity_nb_x = momentum_nb_x/density_nb;
+		   velocity_nb_y = momentum_nb_y/density_nb;
+		   velocity_nb_z = momentum_nb_z/density_nb;
+                   velocity_nb = [velocity_nb_x, velocity_nb_y, velocity_nb_z];
+
+                   speed_sqd_nb = compute_speed_sqd(velocity_nb);
+                   pressure_nb = compute_pressure( density_nb, density_energy_nb, speed_sqd_nb); 
+                   speed_of_sound_nb = compute_speed_of_sound( density_nb, pressure_nb);             
+                  
+                   flux_contribution_nb_momentum_x, flux_contribution_nb_momentum_y, 
+                   flux_contribution_nb_momentum_z, flux_contribution_nb_density_energy
+                     =
+                   compute_flux_contribution( density_nb,
+                                              momentum_nb,
+                                              density_energy_nb, pressure_nb, 
+                                              velocity_nb);
+
+		   factor = -normal_len*smoothing_coefficient*TOD(0.5)*(speed_i + sqrt(speed_sqd_nb) + speed_of_sound_i + speed_of_sound_nb);
+		   flux_i_momentum_y += factor*(momentum_i_y-momentum_nb_y);
+
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_momentum_y += factor*(flux_contribution_nb_momentum_y[0]+flux_contribution_i_momentum_y[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_momentum_y += factor*(flux_contribution_nb_momentum_y[1]+flux_contribution_i_momentum_y[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_momentum_y += factor*(flux_contribution_nb_momentum_y[2]+flux_contribution_i_momentum_y[2]);
+		 }
+		 else if(nb == -1) {  
+		   flux_i_momentum_y += normal_y*pressure_i;
+		 }
+		 else if(nb == -2) {  
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_momentum_y += factor*(ff_flux_contribution_momentum_y[0] + flux_contribution_i_momentum_y[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_momentum_y += factor*(ff_flux_contribution_momentum_y[1] + flux_contribution_i_momentum_y[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_momentum_y += factor*(ff_flux_contribution_momentum_y[2] + flux_contribution_i_momentum_y[2]);
+                 }
+	       }
+             }:flux_i_momentum_y;
+             ( [3,0] <= iv=[j,i] < [4, SIZE]) {
+	       density_i = variables[VAR_DENSITY, i];
+
+	       momentum_i_x = variables[(VAR_MOMENTUM+0), i];
+	       momentum_i_y = variables[(VAR_MOMENTUM+1), i];
+	       momentum_i_z = variables[(VAR_MOMENTUM+2), i];
+               momentum_i = [momentum_i_x, momentum_i_y, momentum_i_z];
+
+	       density_energy_i = variables[VAR_DENSITY_ENERGY, i];
+ 
+	       velocity_i_x = momentum_i_x/density_i;
+	       velocity_i_y = momentum_i_y/density_i;
+	       velocity_i_z = momentum_i_z/density_i;
+               velocity_i = [velocity_i_x, velocity_i_y, velocity_i_z];
+
+               speed_sqd_i = compute_speed_sqd(velocity_i);
+               speed_i = sqrt(speed_sqd_i);
+               pressure_i = compute_pressure( density_i, density_energy_i, speed_sqd_i); 
+               speed_of_sound_i = compute_speed_of_sound( density_i, pressure_i); 
+               
+               flux_contribution_i_momentum_x, flux_contribution_i_momentum_y, 
+               flux_contribution_i_momentum_z, flux_contribution_i_density_energy
+                 =
+               compute_flux_contribution( density_i,
+                                          momentum_i,
+                                          density_energy_i, pressure_i, 
+                                          velocity_i);
+
+               flux_i_density = TOD(0.0f);	
+               flux_i_momentum_x = TOD(0.0f);
+	       flux_i_momentum_y = TOD(0.0f);
+	       flux_i_momentum_z = TOD(0.0f);
+	       flux_i_density_energy = TOD(0.0f);
+
+	       for( j = 0; j < NNB; j++) { 
+                 nb = elements_surrounding_elements[j, i];
+		 normal_x = normals[i,j,0];
+		 normal_y = normals[i,j,1];
+		 normal_z = normals[i,j,2];                
+		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
+
+                 if( nb >= 0) { 
+		   density_nb =        variables[VAR_DENSITY, nb];
+		   momentum_nb_x =     variables[(VAR_MOMENTUM+0), nb];
+		   momentum_nb_y =     variables[(VAR_MOMENTUM+1), nb];
+		   momentum_nb_z =     variables[(VAR_MOMENTUM+2), nb];
+                   momentum_nb = [momentum_nb_x, momentum_nb_y, momentum_nb_z];
+		   density_energy_nb = variables[VAR_DENSITY_ENERGY, nb];
+
+		   velocity_nb_x = momentum_nb_x/density_nb;
+		   velocity_nb_y = momentum_nb_y/density_nb;
+		   velocity_nb_z = momentum_nb_z/density_nb;
+                   velocity_nb = [velocity_nb_x, velocity_nb_y, velocity_nb_z];
+
+                   speed_sqd_nb = compute_speed_sqd(velocity_nb);
+                   pressure_nb = compute_pressure( density_nb, density_energy_nb, speed_sqd_nb); 
+                   speed_of_sound_nb = compute_speed_of_sound( density_nb, pressure_nb);             
+                  
+                   flux_contribution_nb_momentum_x, flux_contribution_nb_momentum_y, 
+                   flux_contribution_nb_momentum_z, flux_contribution_nb_density_energy
+                     =
+                   compute_flux_contribution( density_nb,
+                                              momentum_nb,
+                                              density_energy_nb, pressure_nb, 
+                                              velocity_nb);
+
+		   factor = -normal_len*smoothing_coefficient*TOD(0.5)*(speed_i + sqrt(speed_sqd_nb) + speed_of_sound_i + speed_of_sound_nb);
+		   flux_i_momentum_z += factor*(momentum_i_z-momentum_nb_z);
+
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_momentum_z += factor*(flux_contribution_nb_momentum_z[0]+flux_contribution_i_momentum_z[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_momentum_z += factor*(flux_contribution_nb_momentum_z[1]+flux_contribution_i_momentum_z[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_momentum_z += factor*(flux_contribution_nb_momentum_z[2]+flux_contribution_i_momentum_z[2]);
+		 }
+		 else if(nb == -1) {  
+		   flux_i_momentum_z += normal_z*pressure_i;
+		 }
+		 else if(nb == -2) {  
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_momentum_z += factor*(ff_flux_contribution_momentum_z[0] + flux_contribution_i_momentum_z[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_momentum_z += factor*(ff_flux_contribution_momentum_z[1] + flux_contribution_i_momentum_z[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_momentum_z += factor*(ff_flux_contribution_momentum_z[2] + flux_contribution_i_momentum_z[2]);
+                 }
+	       }
+             }:flux_i_momentum_z;
+             ( [4,0] <= iv=[j,i] < [5, SIZE]) {
+	       density_i = variables[VAR_DENSITY, i];
+
+	       momentum_i_x = variables[(VAR_MOMENTUM+0), i];
+	       momentum_i_y = variables[(VAR_MOMENTUM+1), i];
+	       momentum_i_z = variables[(VAR_MOMENTUM+2), i];
+               momentum_i = [momentum_i_x, momentum_i_y, momentum_i_z];
+
+	       density_energy_i = variables[VAR_DENSITY_ENERGY, i];
+ 
+	       velocity_i_x = momentum_i_x/density_i;
+	       velocity_i_y = momentum_i_y/density_i;
+	       velocity_i_z = momentum_i_z/density_i;
+               velocity_i = [velocity_i_x, velocity_i_y, velocity_i_z];
+
+               speed_sqd_i = compute_speed_sqd(velocity_i);
+               speed_i = sqrt(speed_sqd_i);
+               pressure_i = compute_pressure( density_i, density_energy_i, speed_sqd_i); 
+               speed_of_sound_i = compute_speed_of_sound( density_i, pressure_i); 
+               
+               flux_contribution_i_momentum_x, flux_contribution_i_momentum_y, 
+               flux_contribution_i_momentum_z, flux_contribution_i_density_energy
+                 =
+               compute_flux_contribution( density_i,
+                                          momentum_i,
+                                          density_energy_i, pressure_i, 
+                                          velocity_i);
+
+               flux_i_density = TOD(0.0f);	
+               flux_i_momentum_x = TOD(0.0f);
+	       flux_i_momentum_y = TOD(0.0f);
+	       flux_i_momentum_z = TOD(0.0f);
+	       flux_i_density_energy = TOD(0.0f);
+
+	       for( j = 0; j < NNB; j++) { 
+                 nb = elements_surrounding_elements[j, i];
+		 normal_x = normals[i,j,0];
+		 normal_y = normals[i,j,1];
+		 normal_z = normals[i,j,2];                
+		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
+
+                 if( nb >= 0) { 
+		   density_nb =        variables[VAR_DENSITY, nb];
+		   momentum_nb_x =     variables[(VAR_MOMENTUM+0), nb];
+		   momentum_nb_y =     variables[(VAR_MOMENTUM+1), nb];
+		   momentum_nb_z =     variables[(VAR_MOMENTUM+2), nb];
+                   momentum_nb = [momentum_nb_x, momentum_nb_y, momentum_nb_z];
+		   density_energy_nb = variables[VAR_DENSITY_ENERGY, nb];
+
+		   velocity_nb_x = momentum_nb_x/density_nb;
+		   velocity_nb_y = momentum_nb_y/density_nb;
+		   velocity_nb_z = momentum_nb_z/density_nb;
+                   velocity_nb = [velocity_nb_x, velocity_nb_y, velocity_nb_z];
+
+                   speed_sqd_nb = compute_speed_sqd(velocity_nb);
+                   pressure_nb = compute_pressure( density_nb, density_energy_nb, speed_sqd_nb); 
+                   speed_of_sound_nb = compute_speed_of_sound( density_nb, pressure_nb);             
+                  
+                   flux_contribution_nb_momentum_x, flux_contribution_nb_momentum_y, 
+                   flux_contribution_nb_momentum_z, flux_contribution_nb_density_energy
+                     =
+                   compute_flux_contribution( density_nb,
+                                              momentum_nb,
+                                              density_energy_nb, pressure_nb, 
+                                              velocity_nb);
+
+		   factor = -normal_len*smoothing_coefficient*TOD(0.5)*(speed_i + sqrt(speed_sqd_nb) + speed_of_sound_i + speed_of_sound_nb);
+		   flux_i_density_energy += factor*(density_energy_i-density_energy_nb);
+
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_density_energy += factor*(flux_contribution_nb_density_energy[0]+flux_contribution_i_density_energy[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_density_energy += factor*(flux_contribution_nb_density_energy[1]+flux_contribution_i_density_energy[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_density_energy += factor*(flux_contribution_nb_density_energy[2]+flux_contribution_i_density_energy[2]);
+		 }
+		 else if(nb == -1) {  
+		 }
+		 else if(nb == -2) {  
+		   factor = TOD(0.5)*normal_x;
+		   flux_i_density_energy += factor*(ff_flux_contribution_density_energy[0]+flux_contribution_i_density_energy[0]);
+
+		   factor = TOD(0.5)*normal_y;
+		   flux_i_density_energy += factor*(ff_flux_contribution_density_energy[1]+flux_contribution_i_density_energy[1]);
+
+		   factor = TOD(0.5)*normal_z;
+		   flux_i_density_energy += factor*(ff_flux_contribution_density_energy[2]+flux_contribution_i_density_energy[2]);
+                 }
+	       }
+             }:flux_i_density_energy;
+
+           }:genarray([NVAR,SIZE]);
+
+  return( fluxes);
+}
+
+DBL[5,SIZE] time_step( int k, DBL[5,SIZE] old_variables, 
+                       DBL[SIZE] step_factors, DBL[5,SIZE] fluxes)
+{
+  variables = with {
+                ( [0,0] <= iv=[j,i] < [NVAR, SIZE]) {
+	          factor = step_factors[i]/TOD(RK+1-k);
+                  res = TOD(0.0);
+                  if( j == 0) {
+                    res = old_variables[VAR_DENSITY,i] + factor*fluxes[VAR_DENSITY,i];
+                  }
+                  else if( j == 1){
+                    res = old_variables[(VAR_MOMENTUM+0), i] + factor*fluxes[(VAR_MOMENTUM+0), i];
+                  }
+                  else if( j == 2){
+                    res = old_variables[(VAR_MOMENTUM+1), i] + factor*fluxes[(VAR_MOMENTUM+1), i];
+                  }
+                  else if( j == 3){
+                    res = old_variables[(VAR_MOMENTUM+2), i] + factor*fluxes[(VAR_MOMENTUM+2), i];
+                  }
+                  else if( j == 4){
+                    res = old_variables[VAR_DENSITY_ENERGY, i] + factor*fluxes[VAR_DENSITY_ENERGY, i];
+                  }                 
+                }:res;
+              }:genarray([NVAR, SIZE]);  
+
+  return( variables);
+}
+
+int main()
+{
+  double[SIZE] areas;
+  int[NNB, SIZE] elements_surrounding_elements;
+  double[SIZE, NNB, NDIM] normals;
+
+  DBL[3] ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y, 
+         ff_flux_contribution_momentum_z, ff_flux_contribution_density_energy;
+
+  angle_of_attack = (TOD(3.1415926535897931) / TOD(180.0)) * deg_angle_of_attack;
+
+  ff_variable_density = TOD(1.4);
+
+  ff_pressure = TOD(1.0f);
+  ff_speed_of_sound = sqrt(GAMMA*ff_pressure / ff_variable_density);
+  ff_speed = TOD(ff_mach)*ff_speed_of_sound;
+
+  /* float3 ff_velocity; */
+  ff_velocity = genarray([3],TOD(0.0));
+  ff_velocity[0] = ff_speed*(cos(angle_of_attack));
+  ff_velocity[1] = ff_speed*(sin(angle_of_attack));
+  ff_velocity[2] = TOD(0.0);
+
+  ff_variable_momentum_0 = ff_variable_density * ff_velocity[0];
+  ff_variable_momentum_1 = ff_variable_density * ff_velocity[1];
+  ff_variable_momentum_2 = ff_variable_density * ff_velocity[2];
+
+  ff_variable_density_energy = ff_variable_density*(TOD(0.5)*(ff_speed*ff_speed)) + (ff_pressure / (GAMMA-TOD(1.0)));
+
+  ff_variable = [ff_variable_density, ff_variable_momentum_0, ff_variable_momentum_1, 
+                 ff_variable_momentum_2, ff_variable_density_energy];
+
+  /* float3 ff_momentum; */
+  ff_momentum = genarray([3],TOD(0.0));
+  ff_momentum[0] = ff_variable_momentum_0;
+  ff_momentum[1] = ff_variable_momentum_1;
+  ff_momentum[2] = ff_variable_momentum_2;  
+
+  ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y, 
+  ff_flux_contribution_momentum_z, ff_flux_contribution_density_energy
+    =
+    compute_flux_contribution( ff_variable_density,
+                               ff_momentum,
+                               ff_variable_density_energy, ff_pressure, 
+                               ff_velocity);
+
+
+  /* Read inputs from file */
+  areas = FibreScanDoubleArray(); 
+  elements_surrounding_elements = FibreScanIntArray(); 
+  normals = FibreScanDoubleArray(); 
+
+  /* Initialise variables */
+  variables = with {
+                ([0,0] <= iv < [1,SIZE]):ff_variable_density;
+                ([1,0] <= iv < [2,SIZE]):ff_variable_momentum_0;
+                ([2,0] <= iv < [3,SIZE]):ff_variable_momentum_1;
+                ([3,0] <= iv < [4,SIZE]):ff_variable_momentum_2;
+                ([4,0] <= iv < [5,SIZE]):ff_variable_density_energy;                
+              }:genarray([NVAR,SIZE]);
+
+
+  /* Begin iterations */
+  for(i = 0; i < ITER; i++) {
+    /* for the first iteration we compute the time step */
+    step_factors = compute_step_factor( variables, areas);
+
+    for(j = 0; j < RK; j++) {
+      fluxes = compute_flux( elements_surrounding_elements, normals, variables, ff_variable,
+                             ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y, 
+                             ff_flux_contribution_momentum_z, ff_flux_contribution_density_energy);
+      variables = time_step(j, variables, step_factors, fluxes);
+    }
+  }
+
+#ifdef VERBOSE
+  print(variables);
+#else 
+  print(variables[0,0]);
+#endif
+
+  return( 0);
+}
+
+
