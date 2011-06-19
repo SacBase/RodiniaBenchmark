@@ -1,48 +1,54 @@
 
 * cfd
-This benchmark has been converted to SAC (euler3d.sac). The result of the SAC 
-generated CUDA code has been compared with the orginal Rodina version and the SAC 
-generated sequential code. The results match for most of the data, however, when
-the result is too small, e.g. 10^(-17), the results from CUDA just shows 0 while
-the result from the other two can still be displayed as some number to the power
-of -17. This could be due to the difference in architectures but it has not
-been investigated further.
+The result of the SAC generated CUDA code has been compared with the orginal Rodina CUDA version and the SAC 
+generated sequential code. The results match for most of the data, however, when the result is too small, 
+e.g. 10^(-17), the results from CUDA just shows 0 while the result from the other two can still be displayed 
+as some number to the power of -17. This could be due to the difference in architectures but it has not been 
+investigated further.
 
- Currently we only have double versions, they are 
-euler3d.sac, euler3d_cpu_double.cpp and euler3d_gpu_double.cu. Note that to 
-better utilise the GPU off chip memory bandwidth, the major arrays in the program
-has been transformed from row-wise to column-wise. For example, arrays "varaibles" 
-and "fluxes" were orginally of shape [SIZE, NVAR]. In the Rodinia CUDA version,
-they have been changed to shape [NVAR, SIZE]. The same change has also been
-made in the SAC version. 
+To better utilise the GPU off chip memory bandwidth, layouts of the main arrays have been transformed 
+from row-wise to column-wise. For example, arrays "varaibles" and "fluxes" were orginally of shape [SIZE, NVAR]. 
+In the Rodinia CUDA version and the SAC source code, they have been changed to shape [NVAR, SIZE]. Similarly,
+array "normals" have been transformed from shape [SIZE, NNB, NDIM] (i.e. [SIZE, 4, 3]) to shape [NDIM, NNB, SIZE].
+These ensures that when threads in the 1D thread block access "normals", consecutive threads are accessing
+consequtive array elements along the inner most dimension.
 
-In the Rodinia CUDA version, the major kernel "compute_flux"
-is invoked with a 1D thread grid along the X dimension. Each thread essentially
-computes 5 different elements along the same column of array "fluxes"(Y dimension). 
-These five elements are: density, momentum_x, momentum_y, momentum_z and density_engery.
-This organization ensure coalesced off chip memory accesses. However, with WITH-loop
-in SAC, this is difficult to achieve. Because WITH-loop does not allow the inner
-dimension of an array to computed in parallel. So the current implmentation we 
-have is WITH-loop with 5 partions. Essentially, each partition computes on "row"  
-of array "fluxes". However, this is inefficeint: Firsly, we have 5 times more 
-kernel invocation overheads (the Rodinia CUDA version has only one kernel); Secondly,
-because a lot of computation is common for all 5 rows, separating them loses the
-opportunity to reuse data because data in cache is not persistent across different
-kerenl invocations. This is not an easy problem and further discssion is needed 
-with more experienced SAC developers.  
+In the Rodinia CUDA version, the major kernel "compute_flux" is invoked with a 1D thread grid along the X 
+dimension. Each thread essentially computes 5 different variables (i.e. density, momentumX, momentumY, momentuZ
+and energy density). All five variables are store in the same column of array "fluxes". Indeix of the column
+corresponds to the thread index. Such array layout ensures that off chip memory accesses are coalesced. However, 
+it is very difficult to express the same parallel computation pattern using withloops in SAC. This is because 
+withloop does not allow the inner dimension of an array to be computed in parallel. Therefore, in the current 
+SAC code we implement the computation as a withloop with 5 partitions. Essentially, each partition computes one 
+"row" of array "fluxes". However, this is extremely inefficeint in the following two ways: 1) we have 5 times 
+more kernel invocation overheads (the Rodinia CUDA version has only one kernel); 2) a lot of computation is common 
+for all 5 partitions. By having 5 separate kernels, we lose the opportunity to reuse intermediate data computed 
+those computations as data in the cache is not persistent across different kernel invocations. 
 
-Finally, apart from transforming the arrays layout, the Rodinia verions utilise 
-constant memory to store small arrays. We have NOT yet written a version WITHOUT
-such constant memory optimzation. However, this should be fairly trivial. 
-Not runtime comparision has been made between any versions of this benchmarks. This
-will be performed later. 
+POTENTIAL IMPROVEMENT:
+As we have discussed above, the major factor limiting the performance of the SAC gernerated CUDA code is that 
+SAC does not allowed inner dimension of a withloop to be parallelised. This is not a simple problem and if that
+is to be changed, the semantic of withloop is changed. Further investigation is needed.  
 
-All input files are in the ./input directory. Files with names fvcorr.domn.* are 
-inputs to the Rodinia CUDA and OpenMP version. Files with names sac_input_* are inputs
-to the SAC versions. Here * represent the size (number of rows) of the input. The
-first line of each input file contains the total number of total lines in the file.
-Note that currently, the input size is hardcoded in the program by a #define macro.
-This means that if we want to use a different input file with different size, we
-need to change the #define macro as well. The reason we do this is to ensure all
-arrays in the SAC program is AKS.  
+Finally, apart from transforming the arrays layout as one major optimization towards generating more efficient
+code, the Rodinia CUDA verion utilises constant memory to store small arrays (i.e. ). We have NOT yet performed 
+any experiments to see the benefits of using constant memory in this case althought it can potentially be done
+pretty easily. 
+
+Certain preliminary performance results have been performed between the Rodinia CUDA version and the SAC generated
+code. The result suggests a more than 10x slowdowns of SAC CUDA code due to the inefficiencies discussed earlier.
+More detailed performance comparision will be performed later when we have a better (or quick) solution to the 
+parallelization problem. Also note that, if we want to compare the SAC generated sequential code with either
+Rodinia sequential or openmp code, we cannot simply use the current SAC source to generate sequential code. This
+is because the SAC code has been modified to a certain extent to enable it generating better CUDA code, namely
+the array layout transformantion. However, while such layout might be good for CUDA, it might not be good for
+CPU code. So we need a different version to generate sequential code from (i.e. to convert arrays back to their
+original layout as indicated in the Rodinia openmp version). 
+
+All input files are in the ./input directory. Files with names fvcorr.domn.* are inputs to the Rodinia CUDA and 
+OpenMP version. Files with names sac_input_* are inputs to the SAC versions. Here * represent the size (number of 
+rows) of the input. The first line of each input file contains the total number of total lines in the file. Note 
+that currently, the input size is hardcoded in the program by a #define macro. This means that if we want to use 
+a different input file with different size, we need to change the #define macro as well. The reason we do this is 
+to ensure all arrays in the SAC program is AKS.  
 

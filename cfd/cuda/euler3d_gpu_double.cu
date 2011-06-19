@@ -4,6 +4,7 @@
 #include <cutil.h>
 #include <iostream>
 #include <fstream>
+#include <sys/time.h>
 
 #if CUDART_VERSION < 3000
 struct double3 { double x, y, z; };
@@ -16,8 +17,10 @@ struct double3 { double x, y, z; };
 #define GAMMA 1.4
 
 #ifndef ITER
-#define ITER 10
+#define ITER 1000
 #endif
+
+#define SIZE 193474
 
 #ifndef block_length
 #define block_length 128
@@ -132,6 +135,7 @@ __global__ void cuda_initialize_variables(int nelr, double* variables)
   const int i = (blockDim.x*blockIdx.x + threadIdx.x);
   for(int j = 0; j < NVAR; j++)
     variables[i + j*nelr] = ff_variable[j];
+
 }
 void initialize_variables(int nelr, double* variables)
 {
@@ -205,6 +209,7 @@ __global__ void cuda_compute_step_factor(int nelr, double* variables, double* ar
   step_factors[i] = double(0.5) / (sqrt(areas[i]) * (sqrt(speed_sqd) + speed_of_sound));
 }
 
+inline
 void compute_step_factor(int nelr, double* variables, double* areas, double* step_factors)
 {
   dim3 Dg(nelr / block_length), Db(block_length);
@@ -212,10 +217,6 @@ void compute_step_factor(int nelr, double* variables, double* areas, double* ste
   CUT_CHECK_ERROR("compute_step_factor failed");
 }
 
-/*
- *
- *
-*/
 __global__ void cuda_compute_flux(int nelr, int* elements_surrounding_elements, double* normals, double* variables, double* fluxes)
 {
   const double smoothing_coefficient = double(0.2f);
@@ -352,6 +353,7 @@ __global__ void cuda_compute_flux(int nelr, int* elements_surrounding_elements, 
   fluxes[i + VAR_DENSITY_ENERGY*nelr] = flux_i_density_energy;
 }
 
+inline
 void compute_flux(int nelr, int* elements_surrounding_elements, double* normals, double* variables, double* fluxes)
 {
   dim3 Dg(nelr / block_length), Db(block_length);
@@ -372,9 +374,10 @@ __global__ void cuda_time_step(int j, int nelr, double* old_variables, double* v
   variables[i + (VAR_MOMENTUM+2)*nelr] = old_variables[i + (VAR_MOMENTUM+2)*nelr] + factor*fluxes[i + (VAR_MOMENTUM+2)*nelr];	
 }
 
+inline
 void time_step(int j, int nelr, double* old_variables, double* variables, double* step_factors, double* fluxes)
 {
-  dim3 Dg(nelr / block_length), Db(block_length);
+  dim3 Dg(nelr/block_length), Db(block_length);
   cuda_time_step<<<Dg,Db>>>(j, nelr, old_variables, variables, step_factors, fluxes);
   CUT_CHECK_ERROR("update failed");
 }
@@ -397,7 +400,9 @@ int main(int argc, char** argv)
   CUDA_SAFE_CALL(cudaGetDevice(&dev));
   CUDA_SAFE_CALL(cudaGetDeviceProperties(&prop, dev));
 	
+#ifdef VERBOSE  
   printf("Name:                     %s\n", prop.name);
+#endif
 
   // set far field conditions and load them into constant memory on the gpu
   {
@@ -454,6 +459,7 @@ int main(int argc, char** argv)
     std::ifstream file(data_file_name);
 
     file >> nel;
+    nel = SIZE;  // Assume we know the size of the input
     nelr = block_length*((nel / block_length )+ std::min(1, nel % block_length));
 
     double* h_areas = new double[nelr];
@@ -462,8 +468,7 @@ int main(int argc, char** argv)
 
 		    
     // read in data
-    for(int i = 0; i < nel; i++)
-    {
+    for(int i = 0; i < nel; i++) {
       file >> h_areas[i];
       for(int j = 0; j < NNB; j++) {
 	file >> h_elements_surrounding_elements[i + j*nelr];
@@ -476,7 +481,7 @@ int main(int argc, char** argv)
 	}
       }
     }
-		
+	
     // fill in remaining data
     int last = nel-1;
     for(int i = nel; i < nelr; i++) {
@@ -516,16 +521,22 @@ int main(int argc, char** argv)
   initialize_variables(nelr, old_variables);
   initialize_variables(nelr, fluxes);
   cudaMemset( (void*) step_factors, 0, sizeof(double)*nelr );
+
   // make sure CUDA isn't still doing something before we start timing
   cudaThreadSynchronize();
 
+#ifdef VERBOSE  
   // these need to be computed the first time in order to compute time step
   std::cout << "Starting..." << std::endl;
-
-
+#endif
+/*
   unsigned int timer = 0;
   CUT_SAFE_CALL( cutCreateTimer( &timer));
   CUT_SAFE_CALL( cutStartTimer( timer));
+*/
+
+  struct timeval tv1, tv2;
+  gettimeofday( &tv1, NULL);
 
   // Begin iterations
   for(int i = 0; i < ITER; i++) {
@@ -542,14 +553,22 @@ int main(int argc, char** argv)
       CUT_CHECK_ERROR("time_step failed");			
     }
   }
-
   cudaThreadSynchronize();
+
+  gettimeofday( &tv2, NULL);
+  double runtime = ((tv2.tv_sec+ tv2.tv_usec/1000000.0)-(tv1.tv_sec+ tv1.tv_usec/1000000.0));
+  printf("Runtime(seconds): %f\n", runtime);
+
+/*
   CUT_SAFE_CALL( cutStopTimer(timer) );  
+*/
 
-  std::cout  << (cutGetAverageTimerValue(timer)/1000.0)  / ITER << " seconds per iteration" << std::endl;
-
-  std::cout << "Saving solution..." << std::endl;
 #ifdef VERBOSE  
+  std::cout  << (cutGetAverageTimerValue(timer)/1000.0)  / ITER << " seconds per iteration" << std::endl;
+  std::cout << "Saving solution..." << std::endl;
+#endif
+
+#ifdef OUTPUT  
   dump(variables, nel, nelr);
 #else
   double* h_variables = new double[nelr*NVAR];
@@ -557,10 +576,12 @@ int main(int argc, char** argv)
   printf("%e\n", h_variables[0]);
   delete[] h_variables;
 #endif
-  std::cout << "Saved solution..." << std::endl;
 
-  
+#ifdef VERBOSE  
+  std::cout << "Saved solution..." << std::endl;
   std::cout << "Cleaning up..." << std::endl;
+#endif
+
   dealloc<double>(areas);
   dealloc<int>(elements_surrounding_elements);
   dealloc<double>(normals);
@@ -570,7 +591,9 @@ int main(int argc, char** argv)
   dealloc<double>(fluxes);
   dealloc<double>(step_factors);
 
+#ifdef VERBOSE  
   std::cout << "Done..." << std::endl;
+#endif
 
   return 0;
 }

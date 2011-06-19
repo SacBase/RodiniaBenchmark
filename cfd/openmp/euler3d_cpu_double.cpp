@@ -11,7 +11,7 @@ struct double3 { double x, y, z; };
 
 /*
 #ifndef block_length
-  #ifdef _OPENMP
+  #ifdef OPEN
   #error "you need to define block_length"
   #else
   #define block_length 1
@@ -28,7 +28,7 @@ struct double3 { double x, y, z; };
 #define GAMMA 1.4
 
 #ifndef ITER
-#define ITER 10 
+#define ITER 1000 
 #endif
 
 #define NDIM 3
@@ -65,7 +65,7 @@ void dealloc(T* array)
 template <typename T>
 void copy(T* dst, T* src, int N)
 {
-#ifdef _OPENMP
+#ifdef OPEN
   #pragma omp parallel for default(shared) schedule(static)
 #endif
   for(int i = 0; i < N; i++) {
@@ -119,7 +119,7 @@ double3 ff_flux_contribution_density_energy;
 
 void initialize_variables(int nelr, double* variables)
 {
-#ifdef _OPENMP
+#ifdef OPEN
   #pragma omp parallel for default(shared) schedule(static)
 #endif
   for(int i = 0; i < nelr; i++) {
@@ -177,7 +177,7 @@ void compute_step_factor( int nelr,
                           double* areas,        /* [nelr] */
                           double* step_factors) /* [nelr] */
 {
-#ifdef _OPENMP
+#ifdef OPEN
   #pragma omp parallel for default(shared) schedule(static)
 #endif
   for(int i = 0; i < nelr; i++) {
@@ -204,7 +204,7 @@ void compute_flux(int nelr, int* elements_surrounding_elements, double* normals,
 {
   const double smoothing_coefficient = double(0.2);
 
-#ifdef _OPENMP
+#ifdef OPEN
   #pragma omp parallel for default(shared) schedule(static)
 #endif
   for(int i = 0; i < nelr; i++) {
@@ -340,7 +340,7 @@ void compute_flux(int nelr, int* elements_surrounding_elements, double* normals,
 
 void time_step(int j, int nelr, double* old_variables, double* variables, double* step_factors, double* fluxes)
 {
-#ifdef _OPENMP
+#ifdef OPEN
   #pragma omp parallel for  default(shared) schedule(static)
 #endif
   for(int i = 0; i < nelr; i++) {
@@ -391,6 +391,14 @@ int main(int argc, char** argv)
     ff_momentum.x = *(ff_variable+VAR_MOMENTUM+0); //ff_variable[1]
     ff_momentum.y = *(ff_variable+VAR_MOMENTUM+1); //ff_variable[2]
     ff_momentum.z = *(ff_variable+VAR_MOMENTUM+2); //ff_variable[3]
+
+    /* Output from function compute_flux_contribution are:
+     *   ff_flux_contribution_momentum_x
+     *   ff_flux_contribution_momentum_y
+     *   ff_flux_contribution_momentum_z
+     *   ff_flux_contribution_desity_energy
+     * They are all defined as global variables
+     */
     compute_flux_contribution( ff_variable[VAR_DENSITY], ff_momentum, ff_variable[VAR_DENSITY_ENERGY], 
                                ff_pressure, ff_velocity, ff_flux_contribution_momentum_x, 
                                ff_flux_contribution_momentum_y, ff_flux_contribution_momentum_z, 
@@ -413,9 +421,9 @@ int main(int argc, char** argv)
     file >> nel;
     nelr = block_length*((nel / block_length ) + std::min(1, nel % block_length));
 
-    areas = new double[nelr];
-    elements_surrounding_elements = new int[nelr*NNB]; /* new int[nelr, NNB] */
-    normals = new double[NDIM*NNB*nelr];                /* new double[nelr, 4, 3] */
+    areas = new double[nelr];                           /* 1D array: double[nelr] */
+    elements_surrounding_elements = new int[nelr*NNB];  /* 2D array: int[nelr, 4] */
+    normals = new double[NDIM*NNB*nelr];                /* 3D array: double[nelr, 4, 3] */
 
     // read in data
     for(int i = 0; i < nel; i++) {
@@ -446,39 +454,50 @@ int main(int argc, char** argv)
     }
   }
 
-  // Create arrays and set initial conditions
-  double* variables = alloc<double>(nelr*NVAR);
-  initialize_variables(nelr, variables); // initialize with ff_variables
+  /* After reading data from file, the following three arrays are
+   * essentially the input arrays: 
+   *   1) areas
+   *   2) elements_surrounding_elements
+   *   3) normals
+   */
 
-  double* old_variables = alloc<double>(nelr*NVAR);
-  double* fluxes = alloc<double>(nelr*NVAR);
-  double* step_factors = alloc<double>(nelr);
+  // Create arrays and set initial conditions
+  double* variables = alloc<double>(nelr*NVAR);   /* 2D array: double[nelr, 5] */
+  initialize_variables(nelr, variables);          /* initialize with ff_variables[5] */
+
+  double* old_variables = alloc<double>(nelr*NVAR); /* 2D array: double[nelr, 5] */
+  double* fluxes = alloc<double>(nelr*NVAR);        /* 2D array: double[nelr, 5] */
+  double* step_factors = alloc<double>(nelr);       /* 1D array: double[nelr] */
 
   // these need to be computed the first time in order to compute time step
-  //std::cout << "Starting..." << std::endl;
-#ifdef _OPENMP
+  // std::cout << "Starting..." << std::endl;
+
+#ifdef OPEN
   double start = omp_get_wtime();
 #endif
+
   // Begin iterations
-  for(int i = 0; i < ITER; i++) /* 2000 iterations */ {
+  for(int i = 0; i < ITER; i++) /* number of iterations */ {
     copy<double>(old_variables, variables, nelr*NVAR);
 
     // for the first iteration we compute the time step factors
     compute_step_factor(nelr, variables, areas, step_factors);
 
     for(int j = 0; j < RK; j++) {
+      /* function compute_flux outputs new fluxes array */
       compute_flux(nelr, elements_surrounding_elements, normals, variables, fluxes);
+      /* function time_step outputs new variables array */
       time_step(j, nelr, old_variables, variables, step_factors, fluxes);
     }
   }
 
-#ifdef _OPENMP
+#ifdef OPEN
   double end = omp_get_wtime();
   std::cout  << (end-start)  / ITER << " seconds per iteration" << std::endl;
 #endif
 
   //std::cout << "Saving solution..." << std::endl;
-#ifdef VERBOSE  
+#ifdef OUTPUT 
   dump(variables, nel, nelr);
 #else
   printf("%e\n", variables[0]);

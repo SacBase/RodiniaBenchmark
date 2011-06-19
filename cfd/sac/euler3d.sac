@@ -10,10 +10,10 @@ use Math:  all;
 #define TOD tod
 #endif
 
-#define SIZE 97046
+#define SIZE 193474
 
 #ifndef ITER
-#define ITER 10 
+#define ITER 1000 
 #endif
 
 #define NDIM 3
@@ -79,6 +79,7 @@ compute_flux_contribution( DBL ff_variable_density,
   return( fc_momentum_x, fc_momentum_y, fc_momentum_z, fc_density_energy);    
 }
 
+inline
 DBL[SIZE] compute_step_factor( DBL[5,SIZE] variables, DBL[SIZE] areas)
 {
   step_factors = with {
@@ -106,8 +107,9 @@ DBL[SIZE] compute_step_factor( DBL[5,SIZE] variables, DBL[SIZE] areas)
   return( step_factors);
 }
 
+inline
 DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements, 
-                         DBL[SIZE,NNB,NDIM] normals, DBL[5,SIZE] variables, DBL[5] ff_variable,
+                         DBL[NDIM,NNB,SIZE] normals, DBL[5,SIZE] variables, DBL[5] ff_variable,
                          DBL[3] ff_flux_contribution_momentum_x, DBL[3] ff_flux_contribution_momentum_y, 
                          DBL[3] ff_flux_contribution_momentum_z, DBL[3] ff_flux_contribution_density_energy)
 {
@@ -150,9 +152,9 @@ DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements,
 
 	       for( j = 0; j < NNB; j++) { 
                  nb = elements_surrounding_elements[j, i];
-		 normal_x = normals[i,j,0];
-		 normal_y = normals[i,j,1];
-		 normal_z = normals[i,j,2];                
+		 normal_x = normals[0,j,i];
+		 normal_y = normals[1,j,i];
+		 normal_z = normals[2,j,i];                
 		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
 
                  if( nb >= 0) { 
@@ -293,9 +295,9 @@ DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements,
 
 	       for( j = 0; j < NNB; j++) { 
                  nb = elements_surrounding_elements[j, i];
-		 normal_x = normals[i,j,0];
-		 normal_y = normals[i,j,1];
-		 normal_z = normals[i,j,2];                
+		 normal_x = normals[0,j,i];
+		 normal_y = normals[1,j,i];
+		 normal_z = normals[2,j,i];                
 		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
 
                  if( nb >= 0) { 
@@ -385,9 +387,9 @@ DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements,
 
 	       for( j = 0; j < NNB; j++) { 
                  nb = elements_surrounding_elements[j, i];
-		 normal_x = normals[i,j,0];
-		 normal_y = normals[i,j,1];
-		 normal_z = normals[i,j,2];                
+		 normal_x = normals[0,j,i];
+		 normal_y = normals[1,j,i];
+		 normal_z = normals[2,j,i];                
 		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
 
                  if( nb >= 0) { 
@@ -478,9 +480,9 @@ DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements,
 
 	       for( j = 0; j < NNB; j++) { 
                  nb = elements_surrounding_elements[j, i];
-		 normal_x = normals[i,j,0];
-		 normal_y = normals[i,j,1];
-		 normal_z = normals[i,j,2];                
+		 normal_x = normals[0,j,i];
+		 normal_y = normals[1,j,i];
+		 normal_z = normals[2,j,i];                
 		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
 
                  if( nb >= 0) { 
@@ -571,9 +573,9 @@ DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements,
 
 	       for( j = 0; j < NNB; j++) { 
                  nb = elements_surrounding_elements[j, i];
-		 normal_x = normals[i,j,0];
-		 normal_y = normals[i,j,1];
-		 normal_z = normals[i,j,2];                
+		 normal_x = normals[0,j,i];
+		 normal_y = normals[1,j,i];
+		 normal_z = normals[2,j,i];                
 		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
 
                  if( nb >= 0) { 
@@ -664,9 +666,9 @@ DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements,
 
 	       for( j = 0; j < NNB; j++) { 
                  nb = elements_surrounding_elements[j, i];
-		 normal_x = normals[i,j,0];
-		 normal_y = normals[i,j,1];
-		 normal_z = normals[i,j,2];                
+		 normal_x = normals[0,j,i];
+		 normal_y = normals[1,j,i];
+		 normal_z = normals[2,j,i];                
 		 normal_len = sqrt(normal_x*normal_x + normal_y*normal_y + normal_z*normal_z);
 
                  if( nb >= 0) { 
@@ -726,6 +728,7 @@ DBL[5,SIZE] compute_flux(int[NNB,SIZE] elements_surrounding_elements,
   return( fluxes);
 }
 
+inline
 DBL[5,SIZE] time_step( int k, DBL[5,SIZE] old_variables, 
                        DBL[SIZE] step_factors, DBL[5,SIZE] fluxes)
 {
@@ -758,7 +761,7 @@ int main()
 {
   double[SIZE] areas;
   int[NNB, SIZE] elements_surrounding_elements;
-  double[SIZE, NNB, NDIM] normals;
+  double[NDIM, NNB, SIZE] normals;
 
   DBL[3] ff_flux_contribution_momentum_x, ff_flux_contribution_momentum_y, 
          ff_flux_contribution_momentum_z, ff_flux_contribution_density_energy;
@@ -829,7 +832,7 @@ int main()
     }
   }
 
-#ifdef VERBOSE
+#ifdef OUTPUT
   print(variables);
 #else 
   print(variables[0,0]);
