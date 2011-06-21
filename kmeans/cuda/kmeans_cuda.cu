@@ -3,6 +3,8 @@
 #include <string.h>
 #include <math.h>
 #include <assert.h>
+#include <sys/time.h>
+
 
 #include <omp.h>
 
@@ -16,10 +18,10 @@
 
 
 //#define BLOCK_DELTA_REDUCE
-//#define BLOCK_CENTER_REDUCE
+#define BLOCK_CENTER_REDUCE
 
 #define CPU_DELTA_REDUCE
-#define CPU_CENTER_REDUCE
+//#define CPU_CENTER_REDUCE
 
 extern "C"
 int setup(int argc, char** argv);					/* function prototype */
@@ -195,7 +197,7 @@ kmeansCuda(float  **feature,				/* in: [npoints][nfeatures] */
    changed to 2d (source code on NVIDIA CUDA Programming Guide) */
   dim3  grid( num_blocks_perdim, num_blocks_perdim );
   dim3  threads( num_threads_perdim*num_threads_perdim );
-    
+ 
   /* execute the kernel */
   kmeansPoint<<< grid, threads >>>( feature_d,
                                     nfeatures,
@@ -224,7 +226,7 @@ kmeansCuda(float  **feature,				/* in: [npoints][nfeatures] */
         
   cudaMemcpy(block_deltas_h, block_deltas_d, num_blocks_perdim * num_blocks_perdim * sizeof(int), cudaMemcpyDeviceToHost);
 #endif
-    
+
   /* for each point, sum data points in each cluster
      and see if membership has changed:
      if so, increase delta and change old membership, and update new_centers;
@@ -245,7 +247,7 @@ kmeansCuda(float  **feature,				/* in: [npoints][nfeatures] */
     }
 #endif
   }
-	
+
 #ifdef BLOCK_DELTA_REDUCE	
   /*** calculate global sums from per block sums for delta and the new centers ***/    
   for(i = 0; i < num_blocks_perdim * num_blocks_perdim; i++) {

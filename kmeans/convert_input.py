@@ -25,7 +25,6 @@ j = 0;
 while j < size:
     line = infile.readline();
     components = line.split();
-
     input_array.append([]);
 
     k = 1;

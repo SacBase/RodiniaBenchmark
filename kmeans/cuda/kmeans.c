@@ -171,10 +171,13 @@ int setup(int argc, char **argv)
     fclose(infile);
   }
   io_timing = omp_get_wtime() - io_timing;
-	
+
+#ifdef VERBOSE	
   printf("\nI/O completed\n");
   printf("\nNumber of objects: %d\n", npoints);
   printf("Number of features: %d\n", nfeatures);	
+#endif
+
   /* ============== I/O end ==============*/
 
   // error check for clusters
@@ -189,7 +192,7 @@ int setup(int argc, char **argv)
 
   /* ======================= core of the clustering ===================*/
 
-  cluster_timing = omp_get_wtime();		/* Total clustering time */
+  //cluster_timing = omp_get_wtime();		/* Total clustering time */
 
   cluster_centres = NULL;
   index = cluster( npoints,              /* number of data points */
@@ -204,19 +207,20 @@ int setup(int argc, char **argv)
 		   isRMSE,               /* calculate RMSE */
 		   nloops);              /* number of iteration for each number of clusters */		
     
-  cluster_timing = omp_get_wtime() - cluster_timing;
-
+  //cluster_timing = omp_get_wtime() - cluster_timing;
+  cluster_timing = 0.0f; 
 
   /* =============== Command Line Output =============== */
 
   /* cluster center coordinates
      :displayed only for when k=1*/
   if((min_nclusters == max_nclusters) && (isOutput == 1)) {
+#ifdef VERBOSE
     printf("\n================= Centroid Coordinates =================\n");
+#endif
     for(i = 0; i < max_nclusters; i++){
-      printf("%d:", i);
       for(j = 0; j < nfeatures; j++){
-        printf(" %f", cluster_centres[i][j]);
+        printf("%f ", cluster_centres[i][j]);
       }
       printf("\n\n");
     }
@@ -224,9 +228,11 @@ int setup(int argc, char **argv)
 	
   len = (float) ((max_nclusters - min_nclusters + 1)*nloops);
 
+#ifdef VERBOSE
   printf("Number of Iteration: %d\n", nloops);
   printf("Time for I/O: %.5fsec\n", io_timing);
   printf("Time for Entire Clustering: %.5fsec\n", cluster_timing);
+#endif
 	
   if(min_nclusters != max_nclusters){
     if(nloops != 1){									//range of k, multiple iteration

@@ -18,6 +18,7 @@
 #include <math.h>
 #include "kmeans.h"
 #include <omp.h>
+#include <sys/time.h>
 
 #define RANDOM_MAX 2147483647
 
@@ -111,6 +112,18 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
     new_centers[i] = new_centers[i-1] + nfeatures;
   }
 
+  int* membership_new;
+  membership_new = (int*)malloc(sizeof(int)*npoints);
+  int ii;
+  for( ii = 0; ii < npoints; ii++) { 
+    membership_new[ii] = -1;
+  }
+  int cluster_id;
+
+
+  int c = 0;
+  struct timeval tv1, tv2;
+  gettimeofday( &tv1, NULL);
   do {
     delta = 0.0;
 
@@ -129,6 +142,20 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
 	new_centers[index][j] += feature[i][j];
       }
     }
+/*
+    for (i = 0; i < npoints; i++) {		
+      cluster_id = membership_new[i];
+      new_centers_len[cluster_id] = new_centers_len[cluster_id]+1;
+      if( membership_new[i] != membership[i]) {
+        delta += 1.0;
+        membership[i] = membership_new[i];
+      }
+
+      for (j = 0; j < nfeatures; j++) {			
+        new_centers[cluster_id][j] = new_centers[cluster_id][j] + feature[i][j];
+      }
+    } 
+*/
 
     /* replace old cluster centers with new_centers */
     for (i=0; i<nclusters; i++) {
@@ -141,8 +168,15 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
       new_centers_len[i] = 0;   /* set back to 0 */
     }
     //delta /= npoints;
+    c++;
   } while (delta > threshold);
-  
+ 
+  printf("iterated %d times\n", c);
+
+  gettimeofday( &tv2, NULL);
+  double runtime = ((tv2.tv_sec+ tv2.tv_usec/1000000.0)-(tv1.tv_sec+ tv1.tv_usec/1000000.0));
+  printf("Runtime(seconds): %f\n", runtime);
+ 
   free(new_centers[0]);
   free(new_centers);
   free(new_centers_len);

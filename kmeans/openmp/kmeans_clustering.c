@@ -19,6 +19,7 @@
 #include <math.h>
 #include "kmeans.h"
 #include <omp.h>
+#include <sys/time.h>
 
 #define RANDOM_MAX 2147483647
 
@@ -105,13 +106,14 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
     }
     n++;
   }
-
+ 
+  /* Initially, all membership is -1 */
   for (i=0; i<npoints; i++) {
     membership[i] = -1;
   }
 
   /* need to initialize new_centers_len and new_centers[0] to all 0 */
-  new_centers_len = (int*) calloc(nclusters, sizeof(int));
+  new_centers_len = (int*) calloc(nclusters, sizeof(int));  /* Stores the number of points in each cluster */
 
   new_centers    = (float**) malloc(nclusters *            sizeof(float*));
   new_centers[0] = (float*)  calloc(nclusters * nfeatures, sizeof(float));
@@ -137,7 +139,11 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
     }
   }
   printf("num of threads = %d\n", num_omp_threads);
-  
+
+   
+  struct timeval tv1, tv2;
+  gettimeofday( &tv1, NULL);
+  int c = 0; 
   do {
     delta = 0.0;
     omp_set_num_threads(num_omp_threads);
@@ -150,15 +156,19 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
 		  schedule(static) \
 		  reduction(+:delta)
       for (i=0; i<npoints; i++) {
-	/* find the index of nestest cluster centers */					
+	/* find the index of nestest cluster centers */	
+        /* index can be 0, 1, 2, 3, or 4 */				
 	index = find_nearest_point( feature[i],
 		                    nfeatures,
 		                    clusters,
 		                    nclusters);				
-	/* if membership changes, increase delta by 1 */
-	if (membership[i] != index) delta += 1.0;
 
-	/* assign the membership to object i */
+	/* if membership changes, increase delta by 1 */
+	if (membership[i] != index) {
+          delta += 1.0;
+        }
+
+	/* assign the membership (i.e. belongs to which cluster) to object i */
 	membership[i] = index;
 			
 	/* update new cluster centers : sum of all objects located within */
@@ -191,8 +201,16 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
       }
       new_centers_len[i] = 0;   /* set back to 0 */
     }
+    c++;
   } while (delta > threshold && loop++ < 500);
-  
+ 
+
+  gettimeofday( &tv2, NULL);
+  double runtime = ((tv2.tv_sec+ tv2.tv_usec/1000000.0)-(tv1.tv_sec+ tv1.tv_usec/1000000.0));
+  printf("Runtime(seconds): %f\n", runtime);
+ 
+  printf("iterated %d times\n", c);
+
   free(new_centers[0]);
   free(new_centers);
   free(new_centers_len);

@@ -21,6 +21,7 @@
 #include <float.h>
 #include <math.h>
 #include <omp.h>
+#include <sys/time.h>
 
 #include "kmeans.h"
 
@@ -100,6 +101,10 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
     new_centers[i] = new_centers[i-1] + nfeatures;
   }
 
+  
+  struct timeval tv1, tv2;
+  gettimeofday( &tv1, NULL);
+
   /* iterate until convergence */
   do {
     delta = 0.0;
@@ -126,6 +131,11 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
     }	 
     c++;
   } while ((delta > threshold) && (loop++ < 500));	/* makes sure loop terminates */
+
+
+  gettimeofday( &tv2, NULL);
+  double runtime = ((tv2.tv_sec+ tv2.tv_usec/1000000.0)-(tv1.tv_sec+ tv1.tv_usec/1000000.0));
+  printf("Runtime(seconds): %f\n", runtime);
 
   printf("iterated %d times\n", c);
   free(new_centers[0]);

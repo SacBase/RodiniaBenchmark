@@ -49,7 +49,7 @@ __global__ void invert_mapping( float *input,			/* original */
 
 /* to turn on the GPU delta and center reduction */
 //#define GPU_DELTA_REDUCTION
-//#define GPU_NEW_CENTER_REDUCTION
+#define GPU_NEW_CENTER_REDUCTION
 
 
 /* ----------------- kmeansPoint() --------------------- */
@@ -97,7 +97,6 @@ kmeansPoint(float  *features,			/* in: [npoints*nfeatures] */
       }
     }
   }
-	
 
 #ifdef GPU_DELTA_REDUCTION
   // count how many points are now closer to a different cluster center	
