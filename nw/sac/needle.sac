@@ -1,0 +1,184 @@
+use StdIO: all;
+use Array: all;
+use Random: all;
+
+#define LIMIT -999
+#define ROWS       64 
+#define COLS       64
+#define PENALTY    10
+
+inline int maximum( int a, int b, int c)
+{
+  k = 0;
+  if( a <= b )
+    k = b;
+  else 
+    k = a;
+
+  if( k <=c )
+    k = c;
+
+  return( k);
+}
+
+void runTest( ) 
+{
+  max_rows = ROWS;
+  max_cols = COLS;
+  penalty = PENALTY;
+
+  max_rows = max_rows + 1;
+  max_cols = max_cols + 1;
+
+  /* blosum62[24][24] */
+  blosum62 = [
+    [ 4, -1, -2, -2,  0, -1, -1,  0, -2, -1, -1, -1, -1, -2, -1,  1,  0, -3, -2,  0, -2, -1,  0, -4],
+    [-1,  5,  0, -2, -3,  1,  0, -2,  0, -3, -2,  2, -1, -3, -2, -1, -1, -3, -2, -3, -1,  0, -1, -4],
+    [-2,  0,  6,  1, -3,  0,  0,  0,  1, -3, -3,  0, -2, -3, -2,  1,  0, -4, -2, -3,  3,  0, -1, -4],
+    [-2, -2,  1,  6, -3,  0,  2, -1, -1, -3, -4, -1, -3, -3, -1,  0, -1, -4, -3, -3,  4,  1, -1, -4],
+    [ 0, -3, -3, -3,  9, -3, -4, -3, -3, -1, -1, -3, -1, -2, -3, -1, -1, -2, -2, -1, -3, -3, -2, -4],
+    [-1,  1,  0,  0, -3,  5,  2, -2,  0, -3, -2,  1,  0, -3, -1,  0, -1, -2, -1, -2,  0,  3, -1, -4],
+    [-1,  0,  0,  2, -4,  2,  5, -2,  0, -3, -3,  1, -2, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4],
+    [ 0, -2,  0, -1, -3, -2, -2,  6, -2, -4, -4, -2, -3, -3, -2,  0, -2, -2, -3, -3, -1, -2, -1, -4],
+    [-2,  0,  1, -1, -3,  0,  0, -2,  8, -3, -3, -1, -2, -1, -2, -1, -2, -2,  2, -3,  0,  0, -1, -4],
+    [-1, -3, -3, -3, -1, -3, -3, -4, -3,  4,  2, -3,  1,  0, -3, -2, -1, -3, -1,  3, -3, -3, -1, -4],
+    [-1, -2, -3, -4, -1, -2, -3, -4, -3,  2,  4, -2,  2,  0, -3, -2, -1, -2, -1,  1, -4, -3, -1, -4],
+    [-1,  2,  0, -1, -3,  1,  1, -2, -1, -3, -2,  5, -1, -3, -1,  0, -1, -3, -2, -2,  0,  1, -1, -4],
+    [-1, -1, -2, -3, -1,  0, -2, -3, -2,  1,  2, -1,  5,  0, -2, -1, -1, -1, -1,  1, -3, -1, -1, -4],
+    [-2, -3, -3, -3, -2, -3, -3, -3, -1,  0,  0, -3,  0,  6, -4, -2, -2,  1,  3, -1, -3, -3, -1, -4],
+    [-1, -2, -2, -1, -3, -1, -1, -2, -2, -3, -3, -1, -2, -4,  7, -1, -1, -4, -3, -2, -2, -1, -2, -4],
+    [ 1, -1,  1,  0, -1,  0,  0,  0, -1, -2, -2,  0, -1, -2, -1,  4,  1, -3, -2, -2,  0,  0,  0, -4],
+    [ 0, -1,  0, -1, -1, -1, -1, -2, -2, -1, -1, -1, -1, -2, -1,  1,  5, -2, -2,  0, -1, -1,  0, -4],
+    [-3, -3, -4, -4, -2, -2, -3, -2, -2, -3, -2, -3, -1,  1, -4, -3, -2, 11,  2, -3, -4, -3, -2, -4],
+    [-2, -2, -2, -3, -2, -1, -2, -3,  2, -1, -1, -2, -1,  3, -3, -2, -2,  2,  7, -1, -3, -2, -1, -4],
+    [ 0, -3, -3, -3, -1, -2, -2, -3, -3,  3,  1, -2,  1, -1, -2, -2,  0, -3, -1,  4, -3, -2, -1, -4],
+    [-2, -1,  3,  4, -3,  0,  1, -1,  0, -3, -4,  0, -3, -3, -2,  0, -1, -4, -3, -3,  4,  1, -1, -4],
+    [-1,  0,  0,  1, -3,  3,  4, -2,  0, -3, -3,  1, -1, -3, -1,  0, -1, -3, -2, -2,  1,  4, -1, -4],
+    [ 0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4],
+    [-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1]
+  ];
+	
+  srandom( 7);  
+
+  input_itemsets = genarray( [max_rows, max_cols], 0); 
+  for( i=1; i< max_rows ; i++) {     
+    input_itemsets[i, 0] = random(0, 2147483647) % 10 + 1;
+  }
+  
+  for( j=1; j< max_cols ; j++) {    
+    input_itemsets[0, j] = random(0, 2147483647 )% 10 + 1;
+  }
+
+  reference = genarray( [max_rows, max_cols], 0); 
+  for ( i = 1 ; i < max_rows; i++) {
+    for ( j = 1 ; j < max_cols; j++) {
+      reference[i, j] = blosum62[input_itemsets[i, 0]][input_itemsets[0, j]];
+    }
+  }
+
+  for( i = 1; i< max_rows ; i++) {
+    input_itemsets[i, 0] = -i * penalty;
+  }
+
+  for( j = 1; j< max_cols ; j++) {
+     input_itemsets[0, j] = -j * penalty;
+  }
+
+
+
+  for( i = 1; i < max_cols; i++) {
+    input_itemsets = with {
+                       ( [1,1] <= iv=[r,c] < [1+i,1+i]) {
+                         if( r == (i - c +1)) {
+                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c], 
+                                          input_itemsets[r, c-1] - penalty, 
+			                  input_itemsets[r-1, c] - penalty);
+                         }
+                         else {
+                           res = input_itemsets[r,c];
+                         }
+                       }:res;
+                     }:modarray( input_itemsets);
+  }
+
+  for( i = 1 ; i < max_cols-1; i++) {
+    input_itemsets = with {
+                       ( [1+i,1+i] <= iv=[r,c] < [max_rows,max_cols]) {
+                         if( r == (max_cols - c + i)) { 
+                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c], 
+                                          input_itemsets[r, c-1] - penalty, 
+			                  input_itemsets[r-1, c] - penalty);
+                         }
+                         else {
+                           res = input_itemsets[r,c];
+                         }
+                       }:res;
+                     }:modarray( input_itemsets);
+  }
+
+#ifdef OUTPUT 
+/*
+  printf("print traceback value CPU:\n");
+	
+  for (i = max_rows - 2, j = max_rows - 2; i>=0, j>=0;) {
+    if ( i == max_rows - 2 && j == max_rows - 2 ) {
+      printf("%d ", input_itemsets[i, j]); 
+    }
+    if ( i == 0 && j == 0 ) break;
+
+    if ( i > 0 && j > 0 ) {
+      nw = input_itemsets[(i - 1), j - 1];
+      w  = input_itemsets[ i, j - 1];
+      n  = input_itemsets[(i - 1), j];
+    }
+    else if ( i == 0 ) {
+      nw = n = LIMIT;
+      w  = input_itemsets[i, j - 1];
+    }
+    else if ( j == 0 ) {
+      nw = w = LIMIT;
+      n  = input_itemsets[(i - 1), j];
+    }
+    else {
+    }
+
+    traceback = maximum(nw, w, n);
+	    
+    printf("%d ", traceback);
+
+    if(traceback == nw ) {
+      i--; 
+      j--; 
+      continue;
+    }
+    else if(traceback == w ) {
+      j--; 
+      continue;
+    }
+    else if(traceback == n ) {
+      i--; 
+      continue;
+    }
+    else;
+  }
+  printf("\n");
+*/  
+  for( i = 0; i < max_rows; i++) {
+    for( j = 0; j < max_cols; j++) {
+      printf("%d ", input_itemsets[i, j]);
+    }
+    printf("\n");
+  }
+#endif
+
+}
+
+int main( ) 
+{
+  runTest( );
+
+  return( 0);
+}
+
+
+

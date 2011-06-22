@@ -1,3 +1,4 @@
+
 * NW
 There are three versions of this benchmark: needle.cu, needle.cpp and needle.sac.
 They are the orginal Rodinia CUDA and OpenMP versions and the converted SAC version.
