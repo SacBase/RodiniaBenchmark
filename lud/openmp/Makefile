@@ -3,7 +3,7 @@
 #
 
 # DEBUG can be set to YES to include debugging info, or NO otherwise
-DEBUG          := YES
+DEBUG          := NO
 
 # PROFILE can be set to YES to include profiling info, or NO otherwise
 PROFILE        := NO
@@ -51,6 +51,10 @@ ifeq (YES, ${PROFILE})
   CFLAGS       := ${CFLAGS}   -pg -O3
   CXXFLAGS     := ${CXXFLAGS} -pg -O3
   LDFLAGS      := ${LDFLAGS}  -pg
+endif
+
+ifeq ($(out),1)
+	CFLAGS += -DOUTPUT
 endif
 
 # ------------  additional system include directories  -------------------------

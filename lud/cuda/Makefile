@@ -8,7 +8,7 @@ DEFS += \
 NVCCFLAGS += -I../common \
 			 -O3 \
 			 -use_fast_math \
-			 -arch=sm_13 \
+			 -arch=sm_20 \
 			 -lm \
 			 $(SPACE)
 
@@ -17,6 +17,11 @@ CFLAGS += -I../common \
 		  -O3 \
 		  -Wall \
 		  $(SPACE)
+
+# 'make out=1' output detailed results
+ifeq ($(out),1)
+	NVCCFLAGS += -DOUTPUT
+endif
 
 # Add source files here
 EXECUTABLE  := lud_cuda
@@ -40,5 +45,8 @@ all : $(EXECUTABLE)
 $(EXECUTABLE) : $(OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@  $?
 
+
+
+
 clean:
-	rm -f $(EXECUTABLE) $(OBJS) *.linkinfo
+	rm -f lud_cuda $(OBJS) *.linkinfo

@@ -1,38 +1,148 @@
--base
-  Non-optimized, non-paralleled implementation. It is considered as a baseline implementation to be compared with OpenMP and CUDA implementations. 
-
--common
-  Common functions used in all implementations.
-
--cuda
-  An blocked implementation optimized for CUDA
-
--data
-  Some sample input matrices. 
-  
--omp
-  An paralleled implementation with OpenMP.
-
--tools
-  Tools to generate input matrix with random number.
 
 * lud
-This benchmark has been converted into SAC. The SAC implementation is basicaly a direct
-translation of the OpenMP implmentation, i.e. OpenMP parallel for loops have been converted
-into WITH-lo ps. The Rodinia implementation uses a blocked version and breaks the 
-computation into thress kernels. During each iteration of the blocked for loop, one kernel
-computes one diagonal block, then a second kernel computes both the row and column 
-perimeters (also in blocks) orginating from the just-computed disgonal block. Finally, 
-a third kernel computes all internal blocks. This computation pattern preserves the data
-dependencies while accumulates result over time. Also each kernel employs shared memory
-to optimized data reuse. For the purpose of comparision, each kernel is also provided 
-with a version without shared memory. Initial runtime result shows that the non-shared 
-memory version is almost twice slower than the shared memory version. One critical 
-hand optimization emploied by this benchmark is the blocked outermost for loop. However,
-this is very difficult to specified in SAC at the moment. The result of that is the SAC
-generated code executes at least 16 times more kernels than the Rodinia CUDA version 
-(the blocking factor). Moreover, each WITH-loop has several partition (even thought most
-of them just copy data from one array to another array), each partition is generated as
-a kernel, the total number of kernels is even larger. The result of such inefficiency 
-is that the SAC generated CUDA version is almost 30 times slower than the Rodinia shared
-memory CUDA version.  
+This benchmark performs LU decomposistion on a matrix in place. Data access patterns of this benchmark is complicated
+and need some explaination here. Suppose the the matrix to be decomposed is MAT[10,10], we use a series of figures to show how
+data is accessed and how they depend on each other ('*' denotes elements that have been computed, 'c' denotes elements that 
+are being computed and '@' denotes elements that are accessed for read):
+
+1) First iteration of the outer loop:
+   a) First inner loop computes one row (in parallel) 
+     
+      c c c c c c c c c c 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+      o o o o o o o o o o 
+
+   b) Second inner loop computes one column  (in parallel) 
+
+      @ * * * * * * * * * 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+      c o o o o o o o o o 
+ 
+ 2) Second iteration of the outer loop:
+   a) First inner loop computes one row (in parallel)
+
+      * @ @ @ @ @ @ @ @ @ 
+      @ c c c c c c c c c
+      * o o o o o o o o o 
+      * o o o o o o o o o 
+      * o o o o o o o o o 
+      * o o o o o o o o o 
+      * o o o o o o o o o 
+      * o o o o o o o o o 
+      * o o o o o o o o o 
+      * o o o o o o o o o     
+
+
+   b) Second inner loop computes one column (in parallel)
+
+      * @ * * * * * * * * 
+      * @ * * * * * * * *
+      @ c o o o o o o o o 
+      @ c o o o o o o o o 
+      @ c o o o o o o o o 
+      @ c o o o o o o o o 
+      @ c o o o o o o o o 
+      @ c o o o o o o o o 
+      @ c o o o o o o o o 
+      @ c o o o o o o o o  
+
+ 3) Third iteration of the outer loop:
+   a) First inner loop computes one row (in parallel)
+
+      * * @ @ @ @ @ @ @ @ 
+      * * @ @ @ @ @ @ @ @
+      @ @ c c c c c c c c 
+      * * o o o o o o o o 
+      * * o o o o o o o o 
+      * * o o o o o o o o 
+      * * o o o o o o o o 
+      * * o o o o o o o o 
+      * * o o o o o o o o 
+      * * o o o o o o o o     
+
+
+   b) Second inner loop computes one column (in parallel)
+
+      * * @ * * * * * * * 
+      * * @ * * * * * * *
+      * * @ * * * * * * * 
+      @ @ c o o o o o o o 
+      @ @ c o o o o o o o 
+      @ @ c o o o o o o o 
+      @ @ c o o o o o o o 
+      @ @ c o o o o o o o 
+      @ @ c o o o o o o o 
+      @ @ c o o o o o o o  
+
+As we can see from the figures above, whenever we want to compute either a (partial) row or a (partial) columns, the
+data that re needed have already been computed by the previous iterations. To preserve the dependencies, the program
+is structured in a way such that during each outer loop iteration, a row is computed in parallel followed by a parallel
+computation of a column.   
+
+The Rodinia CUDA implementation essentially uses a blocked version (the outer loop is incremented by the amount equal to the
+size of 1D thread block). During each iteration, the computation is divided into three kernels: lud_diagonal, lud_perimeter
+and lud_internal. 
+1) The lud_diagonal kernel essentially computes along the diagonal of the matrix in sub-matrices of shapes 16x16 (from top 
+left to bottom right). This kernel is launched with one thread block containing 16 threads only and not 16x16 threads even 
+though the computed sub-matrix is 16x16. This is because to compute the sub-matrix, the order to compute the element must 
+follow that described in the figures above. Therefore, the 16 threads will compute one row, and then one column, and one 
+row and then one column and so on until the entire sub-matrix is computed. Note that once the diagnal sub-matrix is computed, 
+it stores the final results and they will not be changed by future interations. 
+
+2) The lud_perimeter kernel computes a row/column of sub-matrices, all with the same sub-matrix Y/X indices as the diagonal 
+sub-matrix computed in the lud_diagonal kernel. Note that this kernel actually combines the computation of row sub-matrices 
+and column sub-matrices in one kernel as an optimization to minimize the number of total kernel launches. Therefore, this 
+kernel is launched with thread blocks each containing 32 threads. In the kernel, the first 16 threads compute the row sub-matrix 
+and the next 16 threads compute the column column sub-matrix.  Note that once the perimeter sub-matrices are computed, they 
+store the final results and they will not be changed by future interations. 
+
+3) The lud_internal kernel computes the sub-matrix in the lower right corner that has not been touched before. The kernel 
+launches thread blocks of shapes 16x16 to compute this sub-matrix. Each thread block accesses two perimeter sub-matrices  
+with the same sub-matrix X/Y indices (both are just computed in step 2 by the lud_perimeter kernel). Note that, after executing
+the kernel, the lower right corner sub-matrix stores the partial results and the results will be finalized every time 
+lud_diagnomal and lud_perimeter are executed in the future iterations. 
+
+The above three steps are executed repeatedly until the final 16x16 sub-matrix in the lower right corner is left. This final 
+sub-matrix is computed outside of the main loop. This organization of kernels preserves data dependencies and accumulates results 
+over time. Each kernel uses shared memory to exploit data reuse. We also provide, for each kernel, a corresponding kernel without 
+utilising shared memory. Experimental results show that the no shared memory version is about 1.5x slower than the shared memory 
+version (512x512 matrix, 15ms vs. 10ms). 
+
+The SAC implementation is basicaly a direct translation of the OpenMP implmentation, i.e. OpenMP parallel for loops 
+have been converted into withloops. Enssentially, there two two modarray withloops in the main loop, each computing a (partial)
+row and a (partial) column during each iteration. There two main problems with this SAC implementation:
+1) For each outer loop iteration, we only compute one row/column and not a block of rows/columns as it's been implemented
+in the Rodinia CUDA implementation. This means we need to launch at least BLOCK_SIZE times more kernels than the Rodinia
+CUDA implementation (BLOCK_SIZE os the blocking factor use in Rodinia CUDA for the outer loop, i.e. 16). As we will discussed
+next, the actual number of kernel launches is even more thatn that.     
+2) Each modarray withloop in the outer loop is transformed by the compiler and eventually each one contains 5 partitions. This
+causes inefficiency in two ways: firstly, we need to launch 5 kernels for each withloop. Secondly, of the 5 partitions, only
+one of them is the actual computation, the other 4 partition simply copy elements from the array to be modified to another 
+new array. This is because SAC does not allow destructive update. So during each iteration, a lot of time has been spent in
+allocting and freeing arrays for the modrray withloop and the copying of elements from old array to the newly allocated fresh
+array.      
+
+Initial performance result is not very satifying: the SAC generated CUDA code is almost 60 times slower than the Rodinia CUDA
+version. Even the SAC gernerated sequential code is 4 times slower than the Rodinia sequential implementation. 
+
+POTENTIAL IMPROVEMENT:
+We can look into the possibility of in-place update in the SAC compiler to eliminate the array copying problem. This might
+require array region analysis to prove that the regions that's been read and written is not overlapped. 
+The blocking optimization used in the Rodinia CUDA implementaion can potentially be expressed in the SAC srouce. However, 
+this will be very explicit and requires that the developer knows that the code will be generated for CUDA and the thread
+block size is 16 etc etc. Otherwise, this is very hard for the compiler to achieve.       
+

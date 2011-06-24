@@ -70,6 +70,7 @@ create_matrix_from_file(float **mp, const char* filename, int *size_p){
   return RET_SUCCESS;
 }
 
+
 func_ret_t
 create_matrix_from_random(float **mp, int size){
   float *l, *u, *m;

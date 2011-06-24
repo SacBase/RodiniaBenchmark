@@ -24,6 +24,7 @@
 
 #include "common.h"
 
+
 static int do_verify = 0;
 int omp_num_threads = 1;
 
@@ -35,18 +36,15 @@ static struct option long_options[] = {
   {0,0,0,0}
 };
 
-extern void
-lud_omp(float *m, int matrix_dim);
+extern void lud_omp(float *m, int matrix_dim);
 
-int
-main ( int argc, char *argv[] )
+int main ( int argc, char *argv[] )
 {
   int matrix_dim = 32; /* default size */
   int opt, option_index=0;
   func_ret_t ret;
   const char *input_file = NULL;
   float *m, *mm;
-  stopwatch sw;
 
   while ((opt = getopt_long(argc, argv, "::vs:i:n:", 
 	  long_options, &option_index)) != -1 ) {
@@ -104,11 +102,16 @@ main ( int argc, char *argv[] )
     matrix_duplicate(m, &mm, matrix_dim);
   }
 
-  stopwatch_start(&sw);
-  lud_omp(m, matrix_dim);
-  stopwatch_stop(&sw);
-  printf("Time consumed(ms): %lf\n", 1000*get_interval_by_sec(&sw));
+  struct timeval tv1, tv2;
+  gettimeofday( &tv1, NULL);
 
+  lud_omp(m, matrix_dim);
+
+  gettimeofday( &tv2, NULL);
+  double runtime = ((tv2.tv_sec*1000.0 + tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0 + tv1.tv_usec/1000.0));
+  printf("Runtime(milliseconds): %f\n", runtime);
+
+#ifdef OUTPUT
   int i, j;
   for( i = 0; i < matrix_dim; i++) {
     for( j = 0; j < matrix_dim; j++) {
@@ -116,6 +119,9 @@ main ( int argc, char *argv[] )
     }
     printf("\n");
   }
+#else
+  printf("[0 0]:%f\n", m[0]);
+#endif
 
   if (do_verify){
     printf("After LUD\n");

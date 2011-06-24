@@ -45,7 +45,6 @@ int main ( int argc, char *argv[] )
   func_ret_t ret;
   const char *input_file = NULL;
   float *m, *d_m, *mm;
-  stopwatch sw;
 
   while ((opt = getopt_long(argc, argv, "::v:ms:i:", 
           long_options, &option_index)) != -1 ) {
@@ -103,28 +102,11 @@ int main ( int argc, char *argv[] )
 
   cudaMalloc((void**)&d_m, matrix_dim*matrix_dim*sizeof(float));
 
-  /* beginning of timing point */
-  //stopwatch_start(&sw);
-
   cudaMemcpy(d_m, m, matrix_dim*matrix_dim*sizeof(float), cudaMemcpyHostToDevice);
-
-
-  struct timeval tv1, tv2;
-  gettimeofday(&tv1, NULL);
-  
   lud_cuda(d_m, matrix_dim, do_shared);
-
-  gettimeofday(&tv2, NULL);
-  double runtime = ((tv2.tv_sec*1000000.0 + tv2.tv_usec)-(tv1.tv_sec*1000000.0 + tv1.tv_usec));
-  printf("kernel time: %f\n", runtime/1000);
-
-
   cudaMemcpy(m, d_m, matrix_dim*matrix_dim*sizeof(float), cudaMemcpyDeviceToHost);
 
-  /* end of timing point */
-  //stopwatch_stop(&sw);
-  //printf("Time consumed(ms): %lf\n", 1000*get_interval_by_sec(&sw));
-
+#ifdef OUTPUT
   int i, j;
   for( i = 0; i < matrix_dim; i++) {
     for( j = 0; j < matrix_dim; j++) {
@@ -132,6 +114,9 @@ int main ( int argc, char *argv[] )
     }
     printf("\n");
   }
+#else
+  printf("[0 0 ]:%f\n", m[0]);
+#endif
 
   cudaFree(d_m);
 

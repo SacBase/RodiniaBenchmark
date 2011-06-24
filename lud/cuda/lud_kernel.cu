@@ -1,5 +1,6 @@
 #include <cuda.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 #define BLOCK_SIZE 16
 
@@ -253,10 +254,13 @@ void lud_cuda(float *m, int matrix_dim, int do_shared)
 {
   int i=0;
   dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
-  float *m_debug = (float*)malloc(matrix_dim*matrix_dim*sizeof(float));
+
+  /* beginning of timing point */
+  struct timeval tv1, tv2;
+  gettimeofday(&tv1, NULL);
 
   if( do_shared) {
-    printf("Executing kernels with shared memory!\n");
+    //printf("Executing kernels with shared memory!\n");
     for (i=0; i < matrix_dim-BLOCK_SIZE; i += BLOCK_SIZE) {
       lud_diagonal<<<1, BLOCK_SIZE>>>(m, matrix_dim, i);
       lud_perimeter<<<(matrix_dim-i)/BLOCK_SIZE-1, BLOCK_SIZE*2>>>(m, matrix_dim, i);
@@ -265,8 +269,8 @@ void lud_cuda(float *m, int matrix_dim, int do_shared)
     }
     lud_diagonal<<<1,BLOCK_SIZE>>>(m, matrix_dim, i);
   }
-  else {
-    printf("Executing kernels without shared memory!\n");
+  else { 
+    //printf("Executing kernels without shared memory!\n");
     
     cudaFuncSetCacheConfig("lud_diagonal_noshr", cudaFuncCachePreferL1);
     cudaFuncSetCacheConfig("lud_perimeter_noshr", cudaFuncCachePreferL1);
@@ -280,5 +284,10 @@ void lud_cuda(float *m, int matrix_dim, int do_shared)
     }
     lud_diagonal<<<1,BLOCK_SIZE>>>(m, matrix_dim, i);
   }
+
+  /* end of timing point */
+  gettimeofday(&tv2, NULL);
+  double runtime = ((tv2.tv_sec*1000.0 + tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0 + tv1.tv_usec/1000.0));
+  printf("Runtime(milliseconds): %f\n", runtime);
 }
 
