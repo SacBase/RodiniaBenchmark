@@ -28,8 +28,34 @@ those computations as data in the cache is not persistent across different kerne
 POTENTIAL IMPROVEMENT:
 As we have discussed above, the major factor limiting the performance of the SAC gernerated CUDA code is that 
 SAC does not allowed inner dimension of a withloop to be parallelised. This is not a simple problem and if that
-is to be changed, the semantic of withloop is changed. Further investigation is needed.  
+is to be changed, the semantic of withloop is changed. However, one potential solution is to enable the withloop
+fusion optimization (which is diabled by default). If we were to do that, we need to divide the array "fluxes"
+into 5 individual 1D arrays (each with shape [SIZE]). Then we can have five individual withloops to compute each
+one. And if withloop fusion is enabled, it should be able to put those five withloops into one single multi-
+operator withloop. And in the case, the common computaion can be put back together (hopefully!). However, there
+are several issues with this approach: 1) the withloop fusion has not been used for ages, so it is very likely
+that by turning it on, there will be a lot of bugs. 2) All CUDA backend code were not expecting multi-operator
+withloops before. So they all need to be modified to deal with that. Especially the create CUDA kernel phase which
+assuems that only one array is the result array.  
 
+UPDATE ON POTENTIAL IMPROVEMENT:
+After investigating withloop fusion for the performance problem, we come across another issue specific to this 
+program. If we divid fluxes in to 5 individual 1D arrays, the sac2c compiler runs out of memory because we have
+too many arguments to a function. So we are not able to experiment with the effect of withloop fusion. However,
+we come up with another idea of "partition fusion". Since each partition can be computed in any order, we can 
+fuse them together as long as they have the same shapes. Once all fusable partitions are fused, we only need one
+CUDA kernel and identical computations of each partition can be shared. Initially, we are thinking of putting
+this "partition fusion" optimization at the very end of memory management. The primary reason is that F_wl_assign 
+for each partition has been added and this makes the fusion easier. To fuse the partitions, we first need to find
+out those partitions that compute the same shape. This implies that it only works with AKS withloop. We then need
+to order the partitions based on their lower bounds. The first partition after this ordering will be the one where
+all other partitions are fused into. For the code of each partition that are fused into the first partition, a few
+variables need to be changed accrodingly:
+1) For each withloop ids, it needs to be incremented by a proper amount
+2) iv needs to be redefined based on the new ids computed in step 1.
+3) wlidx also needs be incremented by a proper amount.
+Apart from the variables mentioned above, the rest of the code should be able to fused without any modifications.          
+ 
 Finally, apart from transforming the arrays layout as one major optimization towards generating more efficient
 code, the Rodinia CUDA verion utilises constant memory to store small arrays (i.e. ). We have NOT yet performed 
 any experiments to see the benefits of using constant memory in this case althought it can potentially be done

@@ -1,19 +1,53 @@
+
 * hotspot (HS)
-This benchmark has been converted to SAC (hotspot.sac). The result of the SAC 
-generated code has been compared with the orginal Rodina version and they seem 
-to match quite well (however, due to tiny roundoff errors, there is slight 
-difference). Based on the original Rodinia version (hotspot_cuda_shr_float.cu),  
-we also added a modified version (hotspot_cuda_noshr_float.cu) which is a straight 
-translation from the OpenMP code (hotspot_openmp_float.cpp) without utilising 
-shared memory. The prupose of this is to compare to the performance of kernel 
-with and without shared memory on the new Fermi architecture, which features 
-hardware managed L1/L2 cache. The runtime results seem to show that *utilising* 
-shared memory is *less* efficient. 
-Inputs to the program are in directory input. For CUDA and OpenMP versions,
-the inputs are separated into two files: temp and power. For SAC, both temp
-and power data are stored in one file for easy reading (sac_temp_power*).
-The CUDA and OpenMP executables can be invoked by the commands stored in
-run_shr, run_noshr and run_openmp. Ouputs from these executables are written
-output_shr.out, output_noshr.out and output_openmp.out.
-Currently, we only have float version and double version might be added 
-in the future.  
+The final computed result of the SAC generated code (both sequential and CUDA) has been compared with 
+the orginal Rodina versions and they seem to match with each other largely (however, due to roundoff 
+errors, slight differences on the order of 10^(-3) exist). Input is read from files in the ./input
+directory. The original Rodinia inputs have been converted to a format which is more suitable for the
+SAC fibre IO to read (conversion is done by the convert_input.py Python script). All SAC input files
+have a name started with sac_ and both power and temperature files have been compbine into one file. 
+
+The original Rodinia CUDA version (hostspot_cuda_shr_float.cu) has been modified and as a result a new 
+file hostspot_cuda_shr_float.cu has been added. The new implementation does not utilise the shared 
+memory at all and does not perform ghost zone optimization desscribed in the paper 
+"Performance Modelling and Automatic Ghost Zone Optimizations for Iterative Stencil Loops on GPUs".
+The purpose of this is to have a baseline CUDA implemenation to compare the performance against (which
+is also roughly what the SAC compiler generated CUDA code looks like). 
+Interestingly, the runtime results show that, in this particular benchmark, the baseline CUDA actually
+performs better than the one with ghost zone optimation. We compare two sets of runtimes:
+1) the total exeuction time of the main loop (baseline execute 2500 times and ghost zone 5000 times)
+2) the kernel execution time recorded by the CUDA profiler. 
+However, we found slight differences between these two comparisoin. When we compare total execution
+time, baseline CUDA is about 1.3 seconds and ghost zone is about 1.88 seconds, a 1.45x speedups. 
+When we compare kernel execution time, baseline CUDA is about 180 microseconds and ghost zone is about
+667 microseconds, a 3.5x speedups. Since the main loop is a very tight loop (only a few array pointer
+exchange at the beginning of the loop apart from the kernel call), we would expect the speedups of the
+kernel directly translated into speedups of the total execution time, which is about 3.5/2=1.75x speedups.
+However, as we have seen, this is not the case: 1.45x(actual) vs. 1.75x(expected). Reason for this is
+still not very clear and requires further investigation. 
+
+One optimization we applied to the original Rodinia CUDA implementaion and our no shared memory implementaion
+is that we lift a few computation out of the kernel, namely Rx_1, Ry_1, Rz_1 and step/Cap (repalce by
+step_div_Cap). This improves the performance significantly and is required to make a fair comparion
+with the SAC generated CUDA code (where, when function is inlined,  constants are computed at compile 
+time and propagated to the generated kernel). 
+
+Performance of the SAC generated sequential code is rounghly 1.37x faster than the Rodinia sequential 
+host code. The reason for that needs to be further investigated.
+
+For the SAC generated CUDA code, the performance is more interesting. By just looking at the kernel
+execution time, it's identical to the Rodinia baseline CUDA implementation as both have almost identical
+kernel. However, when looking at the execution time of the entire loop for 5000 interations, Rodinia
+baseline CUDA takes 1.3 seconds and SAC generated CUDA code takes 2.1 seconds. The reason is that 
+the SAC generated code is not able to perform the clever trick used in the Rodinia baseline CUDA where
+the source and destination array pointers are swapped at the begining of each loop iterations. Instead,
+the SAC generated code needs to allocate a new device array before the kernel call and subsequently 
+free an array after the kernel call in each iteration. This adds significant overheads to the runtime.
+To verify that it is indeed the allocation and deallocation causing the slowdown, we manually modify
+the compiler generated code the perform the pointer switch trick and the runtime drops to 1.3 seconds!      
+
+POTENTIAL IMPROVEMENT:
+Accorrding to the previous discussion, there might be optimization opportunities when looking at the
+memory allocations and deallocations within a loop, especially these memory operations are for device
+memory with particularly large overheads.   
+ 

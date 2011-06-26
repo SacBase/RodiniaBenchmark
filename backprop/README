@@ -1,4 +1,5 @@
 
+* backprop:
 There are three subdirectories: openmp, cuda and sac. The openmp and cuda directories
 contains the source files from the original Rodinia benchmark suite. The sac directory
 contains the equivalent SAC implementation. 
@@ -86,7 +87,12 @@ but after WLUR).
 One interesting thing about the performance is that the Rodinia sequential and openmp implementation
 performs much worse than the SAC sequential implementation. This is mainly because of the 
 withloop folding performs the SAC compiler while the for loops in the Rodinia benchmarks 
-cannot be folded automatically.  
+cannot be folded automatically. 
+
+The Rodinia CUDA implementation is 1.26x faster than the SAC generated CUDA code. There 
+are two main reasons for this difference: The kernel for layforward in Rodinia SAC executes 
+in roughly 118 microseconds and in SAC it's about 165 microseconds. The reason is still not 
+very clear as both kernels look identical. Further investigation is needed. 
 
 The commands to compile the SAC implemeation is in cuda_compile and sac_compile.
 

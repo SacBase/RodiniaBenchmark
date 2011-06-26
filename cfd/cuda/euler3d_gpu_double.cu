@@ -17,7 +17,7 @@ struct double3 { double x, y, z; };
 #define GAMMA 1.4
 
 #ifndef ITER
-#define ITER 1000
+#define ITER 5000
 #endif
 
 #define SIZE 193474

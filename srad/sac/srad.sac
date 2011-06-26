@@ -3,23 +3,23 @@ use Array: all;
 use Math:  all;
 use Random: all;
 
-#ifdef FLOAT
-#define DBL float
-#define TOD tof
-#else 
+#ifdef DOUBLE
 #define DBL double
 #define TOD tod
+#else 
+#define DBL float
+#define TOD tof
 #endif
 
 #define LAMBDA 0.5
-#define ITER   1
+#define ITER   1000
 
 #ifndef SIZE
-#define SIZE 1024
+#define SIZE 2048
 #endif
 
-#define ROWS     SIZE
-#define COLS     SIZE
+#define ROWS SIZE
+#define COLS SIZE
 
 #define R1     0
 #define R2     127
@@ -64,8 +64,20 @@ int main()
   J = random_matrix();
 
   for( iter=0; iter< ITER; iter++) {
+
+#ifdef FOLD
+    sum1, sum2 =
+      with {
+        ( [R1,C1] <= iv=[i,j] <= [R2,C2]) {
+          res1 = J[i,j];
+          res2 = res1*res1;
+        }:(res1, res2);
+      }:( fold(+, TOD(0.0)), 
+          fold(+, TOD(0.0)));
+#else
     sum1=TOD(0.0); 
     sum2=TOD(0.0);
+
     for (i=R1; i<=R2; i++) {
       for (j=C1; j<=C2; j++) {
         tmp   = J[i, j];
@@ -73,6 +85,8 @@ int main()
         sum2  = sum2 + tmp*tmp;
       }
     }
+#endif
+
     meanROI = sum1 / TOD(size_R);
     varROI  = (sum2 / TOD(size_R)) - meanROI*meanROI;
     q0sqr   = varROI / (meanROI*meanROI);
@@ -128,8 +142,7 @@ int main()
     c = with { 
           ( [0, 0] <= iv=[i,j] < [ROWS, COLS]) {
             Jc = J[iv];
-            G2 = (dN[iv]*dN[iv] + dS[iv]*dS[iv] 
-                  + dW[iv]*dW[iv] + dE[iv]*dE[iv]) / (Jc*Jc);
+            G2 = (dN[iv]*dN[iv] + dS[iv]*dS[iv] + dW[iv]*dW[iv] + dE[iv]*dE[iv]) / (Jc*Jc);
             L = (dN[iv] + dS[iv] + dW[iv] + dE[iv]) / Jc;
 
 	    num  = (TOD(0.5)*G2) - ((TOD(1.0)/TOD(16.0))*(L*L)) ;
@@ -171,9 +184,6 @@ int main()
   }
 
 #ifdef OUTPUT
-/*
-  print( J);
-*/
   for( i = 0 ; i < ROWS; i++){
     for ( j = 0 ; j < COLS; j++){
        printf("%.5f\n", J[i, j]); 

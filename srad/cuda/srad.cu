@@ -4,7 +4,7 @@
 #include <math.h>
 
 #ifndef SIZE
-#define SIZE 1024
+#define SIZE 2048
 #endif
 
 #define R1     0
@@ -15,7 +15,7 @@
 #define ROWS     SIZE
 #define COLS     SIZE
 #define LAMBDA   0.5f
-#define NITER    1
+#define NITER    1000
 
 #define BLOCK_X 32 
 #define BLOCK_Y 16 
@@ -208,7 +208,7 @@ srad_cuda_2( float *E_C,
   __shared__ float temp[BLOCK_Y][BLOCK_X];
 
   //load data to shared memory
-  temp[ty][tx]      = J_cuda[index];
+  temp[ty][tx] = J_cuda[index];
 
   __syncthreads();
 	 
@@ -227,7 +227,7 @@ srad_cuda_2( float *E_C,
 	 
   __syncthreads();
   
-  c_cuda_temp[ty][tx]      = C_cuda[index];
+  c_cuda_temp[ty][tx] = C_cuda[index];
 
   __syncthreads();
 
@@ -409,9 +409,9 @@ srad_cuda_2_noshr( float *E_C,
 int
 main( int argc, char** argv) 
 {
-    runTest( argc, argv);
+  runTest( argc, argv);
 
-    return( 0);
+  return( 0);
 }
 
 
@@ -430,7 +430,7 @@ runTest( int argc, char** argv)
     
   rows = ROWS;
   cols = COLS;
-  if ((rows%16!=0) || (cols%16!=0)){
+  if((rows%16!=0) || (cols%16!=0)){
     fprintf(stderr, "rows and cols must be multiples of 16\n");
     exit(1);
   }
@@ -446,7 +446,7 @@ runTest( int argc, char** argv)
 
   I = (float *)malloc( size_I * sizeof(float) );
   J = (float *)malloc( size_I * sizeof(float) );
-  c  = (float *)malloc(sizeof(float)* size_I) ;
+  c = (float *)malloc(sizeof(float)* size_I) ;
 
 
   //Allocate device memory
@@ -513,13 +513,13 @@ runTest( int argc, char** argv)
   cudaThreadSynchronize();
 
 #ifdef OUTPUT
-    //Printing output	
-    //printf("Printing Output:\n"); 
-    for( int i = 0 ; i < rows ; i++){
-      for ( int j = 0 ; j < cols ; j++){
-         printf("%.5f\n", J[i * cols + j]); 
-      }	
-    }
+  //Printing output	
+  //printf("Printing Output:\n"); 
+  for( int i = 0 ; i < rows ; i++){
+    for ( int j = 0 ; j < cols ; j++){
+       printf("%.5f\n", J[i * cols + j]); 
+    }	
+  }
 #endif 
 
   //printf("Computation Done\n");
@@ -534,7 +534,6 @@ runTest( int argc, char** argv)
   cudaFree(S_C);
   free(c);
 }
-
 
 void random_matrix(float *I, int rows, int cols)
 {

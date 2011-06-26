@@ -6,8 +6,8 @@
 #include <sys/time.h>
 
 #define BLOCK_SIZE 16
-#define ROWS       64 
-#define COLS       64
+#define ROWS       4096 
+#define COLS       4096
 #define PENALTY    10
 
 
@@ -32,7 +32,6 @@ __device__ __host__ int maximum( int a, int b, int c){
 __global__ void
 needle_cuda_shared_1( int* reference,
                       int* matrix_cuda, 
-                      int* matrix_cuda_out, 
                       int cols,
                       int penalty,
                       int i,
@@ -99,7 +98,6 @@ needle_cuda_shared_1( int* reference,
 __global__ void
 needle_cuda_shared_2( int* reference,
 		      int* matrix_cuda, 
-		      int* matrix_cuda_out, 
 		      int cols,
 		      int penalty,
 		      int i,
@@ -166,9 +164,8 @@ needle_cuda_shared_2( int* reference,
 }
 
 __global__ void
-needle_cuda_plain_1( int* reference,
+needle_cuda_noshr_1( int* reference,
                       int* matrix_cuda, 
-                      int* matrix_cuda_out, 
                       int cols,
                       int penalty,
                       int i,
@@ -206,9 +203,8 @@ needle_cuda_plain_1( int* reference,
 }
 
 __global__ void
-needle_cuda_plain_2( int* reference,
+needle_cuda_noshr_2( int* reference,
 		      int* matrix_cuda, 
-		      int* matrix_cuda_out, 
 		      int cols,
 		      int penalty,
 		      int i,
@@ -301,7 +297,7 @@ void runTest( int argc, char** argv)
 {
   int max_rows, max_cols, penalty;
   int *input_itemsets, *output_itemsets, *referrence;
-  int *matrix_cuda, *matrix_cuda_out, *referrence_cuda;
+  int *matrix_cuda, *referrence_cuda;
   int size;
 	
   // the lengths of the two sequences should be able to divided by 16.
@@ -324,7 +320,7 @@ void runTest( int argc, char** argv)
   if (!input_itemsets) {
     fprintf(stderr, "error: can not allocate memory");
   }
-  srand ( 7 );
+  srand( 7);
 	
   for (int i = 0 ; i < max_cols; i++){
     for (int j = 0 ; j < max_rows; j++){
@@ -341,8 +337,8 @@ void runTest( int argc, char** argv)
     input_itemsets[j] = rand() % 10 + 1;
   }
 
-  for (int i = 1 ; i < max_cols; i++){
-    for (int j = 1 ; j < max_rows; j++){
+  for (int i = 1 ; i < max_rows; i++){
+    for (int j = 1 ; j < max_cols; j++){
       referrence[i*max_cols+j] = blosum62[input_itemsets[i*max_cols]][input_itemsets[j]];
     }
   }
@@ -358,7 +354,6 @@ void runTest( int argc, char** argv)
   size = max_cols * max_rows;
   cudaMalloc((void**)& referrence_cuda, sizeof(int)*size);
   cudaMalloc((void**)& matrix_cuda, sizeof(int)*size);
-  cudaMalloc((void**)& matrix_cuda_out, sizeof(int)*size);
 	
   cudaMemcpy(referrence_cuda, referrence, sizeof(int) * size, cudaMemcpyHostToDevice);
   cudaMemcpy(matrix_cuda, input_itemsets, sizeof(int) * size, cudaMemcpyHostToDevice);
@@ -367,14 +362,14 @@ void runTest( int argc, char** argv)
   dim3 dimBlock(BLOCK_SIZE, 1);
   int block_width = ( max_cols - 1 )/BLOCK_SIZE;
 
-#ifdef PLAIN  /* No shared memory optimization */
+#ifdef NOSHR  /* No shared memory optimization */
   printf("Processing top-left matrix\n");
   //process top-left matrix
   for( int i = 1 ; i <= block_width ; i++){
     dimGrid.x = i;
     dimGrid.y = 1;
-    cudaFuncSetCacheConfig("needle_cuda_plain_1", cudaFuncCachePreferL1);
-    needle_cuda_plain_1<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, matrix_cuda_out ,max_cols, penalty, i, block_width); 
+    cudaFuncSetCacheConfig("needle_cuda_noshr_1", cudaFuncCachePreferL1);
+    needle_cuda_noshr_1<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, max_cols, penalty, i, block_width); 
   }
 
   printf("Processing bottom-right matrix\n");
@@ -382,8 +377,8 @@ void runTest( int argc, char** argv)
   for( int i = block_width - 1  ; i >= 1 ; i--){
     dimGrid.x = i;
     dimGrid.y = 1;
-    cudaFuncSetCacheConfig("needle_cuda_plain_2", cudaFuncCachePreferL1);
-    needle_cuda_plain_2<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, matrix_cuda_out ,max_cols, penalty, i, block_width); 
+    cudaFuncSetCacheConfig("needle_cuda_noshr_2", cudaFuncCachePreferL1);
+    needle_cuda_noshr_2<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, max_cols, penalty, i, block_width); 
   }
 #else 
   printf("Processing top-left matrix\n");
@@ -391,7 +386,7 @@ void runTest( int argc, char** argv)
   for( int i = 1 ; i <= block_width ; i++){
     dimGrid.x = i;
     dimGrid.y = 1;
-    needle_cuda_shared_1<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, matrix_cuda_out ,max_cols, penalty, i, block_width); 
+    needle_cuda_shared_1<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, max_cols, penalty, i, block_width); 
   }
 
   printf("Processing bottom-right matrix\n");
@@ -399,7 +394,7 @@ void runTest( int argc, char** argv)
   for( int i = block_width - 1  ; i >= 1 ; i--){
     dimGrid.x = i;
     dimGrid.y = 1;
-    needle_cuda_shared_2<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, matrix_cuda_out ,max_cols, penalty, i, block_width); 
+    needle_cuda_shared_2<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, max_cols, penalty, i, block_width); 
   }
 #endif
 
@@ -455,7 +450,5 @@ void runTest( int argc, char** argv)
 
   cudaFree(referrence_cuda);
   cudaFree(matrix_cuda);
-  cudaFree(matrix_cuda_out);
-
 }
 

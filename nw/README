@@ -1,31 +1,86 @@
 
 * NW
-There are three versions of this benchmark: needle.cu, needle.cpp and needle.sac.
-They are the orginal Rodinia CUDA and OpenMP versions and the converted SAC version.
-It seems that the orginal OpenMP version downloaded is slightly incorrect when 
-computing the upper left coner and lower right coner, i.e. they do not conver all
-elements. So this has been fixed and the results now match the results of the 
-original unchanged Rodinia CUDA version. The orginal CUDA version has also been
-augmented with two new kernels (computing upper left coner and lower right coner) 
-without using shared memory (to use these two kernels, define the PLAIN macro).
-Initial runtime result shows that the shared version is slghtly better. Because 
-of this, the CUDA backend of our SAC compiler should also consider using shared
-memory if possible (however, it is not using it yet). The SAC implementation of
-NW is a bit ugly due to the difficulty of expressing diagonal parallelism in SAC.
-In the current implementation, we use one WITH-loop for each upper left coner and
-lower right coner computation (See the two for loops in the program). Within the
-each WITH-loop, each iteration determines if it is the one on the diagonal. If it
-is, the performs the maxumum computation (See the if branch). Otherwise, it just 
-selects the corresponding element without any modifications (See the else branch).    
-Perforamnce of the SAC generated CUDA code has not been compared with the original
-Rodinia CUDA code. However, based on the SAC implementation, the SAC gerneted code
-will definitely be much slower than the Rodinia version. This is not because of 
-the utilization of shared memory, but because in SAC implementation, we lanuch 
-5 kernels for each diagnal strip (due to the way WITH-loop are transformed within
-the compiler). So the runtime will not be very good.
-Another thing to note is that the random function used in the benchmarks. The
-SAC random function generates minus value. So when used these mius value to index
-another array, erroueous reuslt will occur. So currently, to compare the result
-with orginal Rodinia benchmarks (CUDA or OpenMP), for the SAC generated code 
-(Sequential or CUDA), we need to manually change the SACrandom functions to rand().
-After that, all versions produce the same results.
+This is a DNA global alignment algorithm. The main data structure is a 2D matrix and parallelism exists along the diagonal of
+the matrix, i.e. all elements on the diagonal of the matrix can be computed in parallel. To compute each element, four elements
+need to be accessed: the element itself, the north element, the northwest element and the west element. Because of this, the
+diagonals are computed from top left to bottom right. All diagonals are processed by two for loops: one computes the upper left
+triagonal of the matrix (including the main diagonal) and the other one computes the lower right trigonal of the matrix. Suppose 
+the matrix is MAT[11,11], we use a series of figures to show how data is accessed and how they depend on each other ('*' denotes 
+elements that have been computed, 'c' denotes elements that are being computed and '@' denotes elements that are accessed for read):
+
+	 Initial              iter 1 of 1st loop        iter 2 of 1st loop       iter 3 of 1st loop        iter 4 of 1st loop
+
+    * * * * * * * * * * *    @ @ * * * * * * * * *    * @ @ * * * * * * * *    * * @ @ * * * * * * *     * * * @ @ * * * * * * 
+    * o o o o o o o o o o    @ c o o o o o o o o o    @ @ c o o o o o o o o    * @ @ c o o o o o o o     * * @ @ c o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    @ c o o o o o o o o o    @ @ c o o o o o o o o     * @ @ c o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    @ c o o o o o o o o o     @ @ c o o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o     @ c o o o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o     * o o o o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o     * o o o o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o     * o o o o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o     * o o o o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o     * o o o o o o o o o o       
+    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o    * o o o o o o o o o o     * o o o o o o o o o o       
+
+							     ... ...
+
+     iter 1 of 2nd loop        iter 2 of 2nd loop        iter 3 of 2nd loop       iter 4 of 2nd loop        iter 5 of 2nd loop
+
+    * * * * * * * * * * *    * * * * * * * * * * *    * * * * * * * * * * *    * * * * * * * * * * *     * * * * * * * * * * *
+    * * * * * * * * * @ @    * * * * * * * * * * *    * * * * * * * * * * *    * * * * * * * * * * *     * * * * * * * * * * *
+    * * * * * * * * @ @ c    * * * * * * * * * @ @    * * * * * * * * * * *    * * * * * * * * * * *     * * * * * * * * * * *
+    * * * * * * * @ @ c o    * * * * * * * * @ @ c    * * * * * * * * * @ @    * * * * * * * * * * *     * * * * * * * * * * *
+    * * * * * * @ @ c o o    * * * * * * * @ @ c o    * * * * * * * * @ @ c    * * * * * * * * * @ @     * * * * * * * * * * *
+    * * * * * @ @ c o o o    * * * * * * @ @ c o o    * * * * * * * @ @ c o    * * * * * * * * @ @ c     * * * * * * * * * @ @       
+    * * * * @ @ c o o o o    * * * * * @ @ c o o o    * * * * * * @ @ c o o    * * * * * * * @ @ c o     * * * * * * * * @ @ c       
+    * * * @ @ c o o o o o    * * * * @ @ c o o o o    * * * * * @ @ c o o o    * * * * * * @ @ c o o     * * * * * * * @ @ c o       
+    * * @ @ c o o o o o o    * * * @ @ c o o o o o    * * * * @ @ c o o o o    * * * * * @ @ c o o o     * * * * * * @ @ c o o       
+    * @ @ c o o o o o o o    * * @ @ c o o o o o o    * * * @ @ c o o o o o    * * * * @ @ c o o o o     * * * * * @ @ c o o o       
+    * @ c o o o o o o o o    * * @ c o o o o o o o    * * * @ c o o o o o o    * * * * @ c o o o o o     * * * * * @ c o o o o  
+
+As we can see from the figures above, whenever we want to compute a diagonal, the data that we need have already been computed by 
+the previous two iterations.
+
+The Rodinia CUDA implementation essentially uses a blocked version (the two outer for loops interate over blocks). During each 
+iteration, the computation is performed by the kernel needle_cuda_shared_1 or needle_cuda_shared_2 (depending on whether we are
+computing upper left corner or lower right corner) or, in the case of no shared memory utilization, needle_cuda_noshr_1 or
+needle_cuda_noshr_2. The thread block shape is a 1D array with 16 threads. The grid shape is also 1D but the number of blocks it
+contains depends on the iteration of the outer loop (the number of thread blocks is actually equals to the loop index variable, 
+i.e. i). For the first for loop, the number of thread blocks starts from 1 and is incremented by 1 until it reaches block_width. 
+For the second for loop, the number of thread blocks starts from block_width-1 and is decremented by 1 until it reaches 1. 
+Each kernel computes i sub-block(s) of the matrix with shapes 16x16. All theses sub-blocks are along the diagonal of the matrix. 
+
+The SAC implementation is basicaly a direct translation of the OpenMP implmentation, i.e. OpenMP parallel for loops 
+have been converted into withloops (it seems that the orginal OpenMP version downloaded is slightly incorrect when 
+computing the upper left corner and lower right corner, i.e. not all elements are computed. This has been fixed and the results
+now match those of the Rodinia CUDA version). Essentially, each for loop contains a modarray which modifies a square sub-matrix
+with increasing size (increment is 1 each iteration). During each iteration of the modarray, it is determined whether the modarray
+loop indices of that iteration represent a dignoal element. If it is, that iteration performs the computation (see the if branch).
+Otherwise,it just copies the corresponding element (see the else branch). 
+
+There two main problems with this SAC implementation (these problems occur in the Needleman-Wunsch benchmark as well so these
+two benchmarks need to be consider together. Please refer the the README file in the nw deirectory):
+1) For each for loop iteration, we actually only compute one diagonal of single elements and not a diagonal of a block of elements 
+as it's been implemented in the Rodinia CUDA implementation. This means we need to launch at least BLOCK_SIZE (i.e. 16) times more 
+kernels than the Rodinia CUDA implementation. As we will discussed next, the actual number of kernel launched is even more than that.     
+2) Each modarray withloop in the for loop is transformed by the compiler and eventually contains 5(?) partitions. This causes 
+inefficiency in two ways: firstly, we need to launch 5 kernels for each withloop. Secondly, of the 5 partitions, only one of them 
+is the actual computation, the other 4 partition simply copy elements from the array to be modified to another new array. This is 
+because SAC does not allow destructive update. So during each iteration, a lot of time has been spent in allocting and freeing 
+arrays for the modrray withloop and the copying of elements from old array to the newly allocated fresh array.      
+
+Initial performance result is not very satifying: the SAC generated CUDA code is almost 70 times slower than the Rodinia CUDA
+version. The SAC gernerated sequential code is 255 times slower than the Rodinia sequential implementation. 
+
+POTENTIAL IMPROVEMENT:
+We can look into the possibility of in-place update in the SAC compiler to eliminate the array copying problem. This might
+require array region analysis to prove that the regions that's been read and written is not overlapped. 
+The blocking optimization used in the Rodinia CUDA implementaion can potentially be expressed in the SAC srouce. However, 
+this will be very explicit and requires that the developer knows that the code will be generated for CUDA and the thread
+block size is 16 etc etc. Otherwise, this is very hard for the compiler to achieve.    
+
+
+
+
+
+

@@ -6,7 +6,7 @@
 #include <math.h>
 #include <sys/time.h>
 #include <omp.h>
-//#define OPENMP
+#define OPEN
 //#define NUM_THREAD 4
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,15 +15,19 @@ void runTest( int argc, char** argv);
 int maximum( int a, int b, int c)
 {
   int k;
-  if( a <= b )
+  if( a <= b) {
     k = b;
-  else 
+  } 
+  else { 
     k = a;
+  }
 
-  if( k <=c )
+  if( k <=c) {
     return(c);
-  else
+  }
+  else {
     return(k);
+  }
 }
 
 
@@ -63,8 +67,7 @@ double gettime() {
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-int
-main( int argc, char** argv) 
+int main( int argc, char** argv) 
 {
   runTest( argc, argv);
 
@@ -83,8 +86,7 @@ void usage(int argc, char **argv)
 ////////////////////////////////////////////////////////////////////////////////
 //! Run a simple test for CUDA
 ////////////////////////////////////////////////////////////////////////////////
-void
-runTest( int argc, char** argv) 
+void runTest( int argc, char** argv) 
 {
   int max_rows, max_cols, penalty,idx, index;
   int *input_itemsets, *referrence;
@@ -96,8 +98,8 @@ runTest( int argc, char** argv)
   // the lengths of the two sequences should be able to divided by 16.
   // And at current stage  max_rows needs to equal max_cols
   if (argc == 4) {
-    max_rows = atoi(argv[1]);
-    max_cols = atoi(argv[1]);
+    max_rows = atoi(argv[1]); //2048
+    max_cols = atoi(argv[1]); //2048
     penalty = atoi(argv[2]);
     omp_num_threads = atoi(argv[3]);
   }
@@ -132,8 +134,8 @@ runTest( int argc, char** argv)
     input_itemsets[j] = rand() % 10 + 1;
   }
 
-  for (int i = 1 ; i < max_cols; i++) {
-    for (int j = 1 ; j < max_rows; j++) {
+  for (int i = 1 ; i < max_rows; i++) {
+    for (int j = 1 ; j < max_cols; j++) {
       referrence[i*max_cols+j] = blosum62[input_itemsets[i*max_cols]][input_itemsets[j]];
     }
   }
@@ -143,7 +145,7 @@ runTest( int argc, char** argv)
   }
 
   for( int j = 1; j< max_cols ; j++) {
-     input_itemsets[j] = -j * penalty;
+    input_itemsets[j] = -j * penalty;
   }
 
 /*
@@ -152,7 +154,7 @@ runTest( int argc, char** argv)
   printf("Processing top-left matrix\n");
 
   for( int i = 0 ; i < max_cols-2 ; i++) {
-#ifdef OPENMP
+#ifdef OPEN
     omp_set_num_threads(omp_num_threads);
     #pragma omp parallel for shared(input_itemsets) firstprivate(i,max_cols,penalty) private(idx, index) 
 #endif 
@@ -167,7 +169,7 @@ runTest( int argc, char** argv)
   printf("Processing bottom-right matrix\n");
   //Compute bottom-right matrix 
   for( int i = max_cols - 4 ; i >= 0 ; i--) {
-#ifdef OPENMP	
+#ifdef OPEN	
     omp_set_num_threads(omp_num_threads);
     #pragma omp parallel for shared(input_itemsets) firstprivate(i,max_cols,penalty) private(idx, index) 
 #endif 
@@ -180,17 +182,22 @@ runTest( int argc, char** argv)
   }
 */
 
-  //Compute top-left matrix 
+  //Compute top-left matrix
+#ifdef VERBOSE 
   printf("Num of threads: %d\n", omp_num_threads);
   printf("Processing top-left matrix\n");
-
   printf("rows and cols: %d %d\n", max_rows, max_cols);
+#endif
 
+  /* The top-left matrix includes the center diagonal line with 2048 elements */
   for( int i = 0 ; i < max_cols-1 ; i++) {
-#ifdef OPENMP
+#ifdef OPEN
     omp_set_num_threads(omp_num_threads);
     #pragma omp parallel for shared(input_itemsets) firstprivate(i,max_cols,penalty) private(idx, index) 
 #endif 
+    /* This loop goes from to top right to lower left along each diagonal line
+     * Of course, if it gets parallelized, the order doesn't matter 
+     */
     for( idx = 0 ; idx <= i ; idx++) {
       index = (idx + 1) * max_cols + (i + 1 - idx);
       input_itemsets[index]= maximum( input_itemsets[index-1-max_cols]+ referrence[index], 
@@ -199,13 +206,19 @@ runTest( int argc, char** argv)
     }
   }
 
+#ifdef VERBOSE
   printf("Processing bottom-right matrix\n");
+#endif
+
   //Compute bottom-right matrix 
   for( int i = max_cols - 3 ; i >= 0 ; i--) {
-#ifdef OPENMP	
+#ifdef OPEN	
     omp_set_num_threads(omp_num_threads);
     #pragma omp parallel for shared(input_itemsets) firstprivate(i,max_cols,penalty) private(idx, index) 
-#endif 
+#endif    
+    /* This loop goes from to lower left to top right along each diagonal line  
+     * Of course, if it gets parallelized, the order doesn't matter 
+     */ 
     for( idx = 0 ; idx <= i ; idx++) {
       index =  ( max_cols - idx - 1 ) * max_cols + idx + max_cols - i - 1 ;
       input_itemsets[index]= maximum( input_itemsets[index-1-max_cols]+ referrence[index], 
@@ -215,8 +228,6 @@ runTest( int argc, char** argv)
   }
 
 #ifdef OUTPUT 
-  printf("print traceback value CPU:\n");
-
 /*	
   int i, j;
   for (i = j = max_rows - 2; i>=0, j>=0;) {
@@ -271,8 +282,10 @@ runTest( int argc, char** argv)
     }
     printf("\n");
   }
-
+#else
+  printf("%d\n", input_itemsets[0]);
 #endif
+
 }
 
 

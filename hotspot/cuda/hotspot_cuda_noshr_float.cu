@@ -1,19 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/time.h>
 #include <assert.h>
 
 #define BLOCK_SIZE 16
 #define STR_SIZE 256
 
+#define ITER 5000
+
+#ifndef SIZE
+#define SIZE 1024
+#endif
+
 /* maximum power density possible (say 300W for a 10mm x 10mm chip)	*/
-#define MAX_PD	(3.0e6)
+#define MAX_PD	     3000000.0f
 /* required precision in degrees	*/
-#define PRECISION	0.001f
-#define SPEC_HEAT_SI 1.75e6
-#define K_SI 100
+#define PRECISION    0.001f
+#define SPEC_HEAT_SI 1750000.0f
+#define K_SI         100
 /* capacitance fitting factor	*/
-#define FACTOR_CHIP	0.5f
+#define FACTOR_CHIP  0.5f
 
 /* chip parameters	*/
 float t_chip = 0.0005f;
@@ -36,6 +43,7 @@ void fatal(char *s)
 
 void writeoutput(float *vect, int grid_rows, int grid_cols, char *file)
 {
+/*
   int i,j, index=0;
   FILE *fp;
   char str[STR_SIZE];
@@ -43,15 +51,27 @@ void writeoutput(float *vect, int grid_rows, int grid_cols, char *file)
   if( (fp = fopen(file, "w" )) == 0 )
     printf( "The file was not opened\n" );
 
-  for (i=0; i < grid_rows; i++) 
+  for (i=0; i < grid_rows; i++) { 
     for (j=0; j < grid_cols; j++) {
       sprintf(str, "%g\n", vect[i*grid_cols+j]);
       fputs(str,fp);
       index++;
-  }
+    }
+  } 
   fclose(fp);	
-}
+*/
 
+#ifdef OUTPUT
+  int i,j;
+  for (i=0; i < grid_rows; i++) { 
+    for (j=0; j < grid_cols; j++) {
+      printf("%f\n", vect[i*grid_cols+j]);
+    }
+  }
+#else
+  printf("%f\n", vect[0]);
+#endif
+}
 
 void readinput(float *vect, int grid_rows, int grid_cols, char *file)
 {
@@ -60,18 +80,22 @@ void readinput(float *vect, int grid_rows, int grid_cols, char *file)
   char str[STR_SIZE];
   float val;
 
-  if( (fp  = fopen(file, "r" )) ==0 )
+  if( (fp  = fopen(file, "r" )) ==0) {
     printf( "The file was not opened\n" );
+  }
 
-  for (i=0; i <= grid_rows-1; i++) 
+  for (i=0; i <= grid_rows-1; i++) { 
     for (j=0; j <= grid_cols-1; j++) {
       fgets(str, STR_SIZE, fp);
-      if (feof(fp))
+      if (feof(fp)) {
         fatal("not enough lines in file");
+      }
       //if ((sscanf(str, "%d%f", &index, &val) != 2) || (index != ((i-1)*(grid_cols-2)+j-1)))
-      if ((sscanf(str, "%f", &val) != 1))
+      if ((sscanf(str, "%f", &val) != 1)) {
         fatal("invalid file format");
+      }
       vect[i*grid_cols+j] = val;
+    }
   }
   fclose(fp);	
 }
@@ -80,19 +104,19 @@ void readinput(float *vect, int grid_rows, int grid_cols, char *file)
 #define CLAMP_RANGE(x, min, max) x = (x<(min)) ? min : ((x>(max)) ? max : x )
 #define MIN(a, b) ((a)<=(b) ? (a) : (b))
 
-__global__ void calculate_temp(float *power,   //power input
-                               float *temp_src,    //temperature input/output
-                               float *temp_dst,    //temperature input/output
-                               int grid_cols,  //Col of grid
-                               int grid_rows,  //Row of grid
-                               float Cap,      //Capacitance
-                               float Rx, 
-                               float Ry, 
-                               float Rz, 
-                               float step){
+__global__ void calculate_temp(float *power,     //power input
+                               float *temp_src,  //temperature input/output
+                               float *temp_dst,  //temperature input/output
+                               int grid_cols,    //Col of grid
+                               int grid_rows,    //Row of grid
+                               //float Cap,        
+                               float Rx_1, 
+                               float Ry_1, 
+                               float Rz_1, 
+                               float step_div_Cap){
 
   float amb_temp = 80.0f;
-  float Rx_1,Ry_1,Rz_1;
+//  float Rx_1,Ry_1,Rz_1;
   float delta;
         
   int bx = blockIdx.x;
@@ -100,14 +124,13 @@ __global__ void calculate_temp(float *power,   //power input
 
   int tx=threadIdx.x;
   int ty=threadIdx.y;
-	
-  Rx_1=1.0f/Rx;
-  Ry_1=1.0f/Ry;
-  Rz_1=1.0f/Rz;
-
+/*	
+  Rx_1 = 1.0f/Rx;
+  Ry_1 = 1.0f/Ry;
+  Rz_1 = 1.0f/Rz;
+*/
   int idxX = bx*BLOCK_SIZE+tx;
   int idxY = by*BLOCK_SIZE+ty;
-
   int index = idxY*grid_cols+idxX;
 
   int N, S, W, E;
@@ -119,71 +142,69 @@ __global__ void calculate_temp(float *power,   //power input
 
   /*	Corner 1	*/
   if ( (idxY == 0) && (idxX == 0) ) {
-    delta = (step / Cap) * (power[index] +
+    delta = (step_div_Cap) * (power[index] +
             (temp_src[E] - temp_src[index]) * Rx_1 +
 	    (temp_src[S] - temp_src[index]) * Ry_1 +
 	    (amb_temp - temp_src[index]) * Rz_1);
   }	/*	Corner 2	*/
   else if ((idxY == 0) && (idxX == grid_cols-1)) {
-    delta = (step / Cap) * (power[index] +
+    delta = (step_div_Cap) * (power[index] +
             (temp_src[W] - temp_src[index]) * Rx_1 +
-				(temp_src[S] - temp_src[index]) * Ry_1 +
-				(amb_temp - temp_src[index]) * Rz_1);
-	}	/*  Corner 3	*/
-	else if ((idxY == grid_rows-1) && (idxX == grid_cols-1)) {
-		delta = (step / Cap) * (power[index] + 
-				(temp_src[W] - temp_src[index]) * Rx_1 + 
-				(temp_src[N] - temp_src[index]) * Ry_1 + 
-				(amb_temp - temp_src[index]) * Rz_1);					
-	}	/*	Corner 4	*/
-	else if ((idxY == grid_rows-1) && (idxX == 0)) {
-		delta = (step / Cap) * (power[index] + 
-				(temp_src[E] - temp_src[index]) * Rx_1 + 
-				(temp_src[N] - temp_src[index]) * Ry_1 + 
-				(amb_temp - temp_src[index]) * Rz_1);
-	}	/*	Edge 1	*/
-	else if (idxY == 0) {
-		delta = (step / Cap) * (power[index] + 
-				(temp_src[E] + temp_src[W] - 2.0f*temp_src[index]) * Rx_1 + 
-				(temp_src[S] - temp_src[index]) * Ry_1 + 
-				(amb_temp - temp_src[index]) * Rz_1);
-	}	/*	Edge 2	*/
-	else if (idxX == grid_cols-1) {
-		delta = (step / Cap) * (power[index] + 
-				(temp_src[S] + temp_src[N] - 2.0f*temp_src[index]) * Ry_1 + 
-				(temp_src[W] - temp_src[index]) * Rx_1 + 
-				(amb_temp - temp_src[index]) * Rz_1);
-	}	/*	Edge 3	*/
-	else if (idxY == grid_rows-1) {
-		delta = (step / Cap) * (power[index] + 
-				(temp_src[E] + temp_src[W] - 2.0f*temp_src[index]) * Rx_1 + 
-				(temp_src[N] - temp_src[index]) * Ry_1 + 
-				(amb_temp - temp_src[index]) * Rz_1);
-	}	/*	Edge 4	*/
-	else if (idxX == 0) {
-		delta = (step / Cap) * (power[index] + 
-				(temp_src[S] + temp_src[N] - 2.0f*temp_src[index]) * Ry_1 + 
-				(temp_src[E] - temp_src[index]) * Rx_1 + 
-				(amb_temp - temp_src[index]) * Rz_1);
-	}	/*	Inside the chip	*/
-	else {
-		delta = (step / Cap) * (power[index] + 
-				(temp_src[S] + temp_src[N] - 2.0f*temp_src[index]) * Ry_1 + 
-				(temp_src[E] + temp_src[W] - 2.0f*temp_src[index]) * Rx_1 + 
-				(amb_temp - temp_src[index]) * Rz_1);
-	}
-  			
-	/*	Update Temperatures	*/
-	temp_dst[index] = temp_src[index]+ delta;
+	    (temp_src[S] - temp_src[index]) * Ry_1 +
+	    (amb_temp - temp_src[index]) * Rz_1);
+  }	/*  Corner 3	*/
+  else if ((idxY == grid_rows-1) && (idxX == grid_cols-1)) {
+    delta = (step_div_Cap) * (power[index] + 
+	    (temp_src[W] - temp_src[index]) * Rx_1 + 
+	    (temp_src[N] - temp_src[index]) * Ry_1 + 
+	    (amb_temp - temp_src[index]) * Rz_1);					
+  }	/*	Corner 4	*/
+  else if ((idxY == grid_rows-1) && (idxX == 0)) {
+    delta = (step_div_Cap) * (power[index] + 
+	    (temp_src[E] - temp_src[index]) * Rx_1 + 
+	    (temp_src[N] - temp_src[index]) * Ry_1 + 
+	    (amb_temp - temp_src[index]) * Rz_1);
+  }	/*	Edge 1	*/
+  else if (idxY == 0) {
+    delta = (step_div_Cap) * (power[index] + 
+	    (temp_src[E] + temp_src[W] - 2.0f*temp_src[index]) * Rx_1 + 
+	    (temp_src[S] - temp_src[index]) * Ry_1 + 
+	    (amb_temp - temp_src[index]) * Rz_1);
+  }	/*	Edge 2	*/
+  else if (idxX == grid_cols-1) {
+    delta = (step_div_Cap) * (power[index] + 
+	    (temp_src[S] + temp_src[N] - 2.0f*temp_src[index]) * Ry_1 + 
+	    (temp_src[W] - temp_src[index]) * Rx_1 + 
+	    (amb_temp - temp_src[index]) * Rz_1);
+  }	/*	Edge 3	*/
+  else if (idxY == grid_rows-1) {
+    delta = (step_div_Cap) * (power[index] + 
+	    (temp_src[E] + temp_src[W] - 2.0f*temp_src[index]) * Rx_1 + 
+	    (temp_src[N] - temp_src[index]) * Ry_1 + 
+	    (amb_temp - temp_src[index]) * Rz_1);
+  }	/*	Edge 4	*/
+  else if (idxX == 0) {
+    delta = (step_div_Cap) * (power[index] + 
+	    (temp_src[S] + temp_src[N] - 2.0f*temp_src[index]) * Ry_1 + 
+	    (temp_src[E] - temp_src[index]) * Rx_1 + 
+	    (amb_temp - temp_src[index]) * Rz_1);
+  }	/*	Inside the chip	*/
+  else {
+    delta = (step_div_Cap) * (power[index] + 
+	    (temp_src[S] + temp_src[N] - 2.0f*temp_src[index]) * Ry_1 + 
+	    (temp_src[E] + temp_src[W] - 2.0f*temp_src[index]) * Rx_1 + 
+	    (amb_temp - temp_src[index]) * Rz_1);
+  }
+		  
+  /*	Update Temperatures	*/
+  temp_dst[index] = temp_src[index]+ delta;
 }
-
 
 /*
    compute N time steps
 */
-
-int compute_tran_temp(float *MatrixPower,float *MatrixTemp[2], int col, int row, \
-		int total_iterations, int blockCols, int blockRows) 
+int compute_tran_temp( float *MatrixPower,float *MatrixTemp[2], int col, int row,
+		       int total_iterations, int blockCols, int blockRows) 
 {
   dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE); // [16, 16]
   dim3 dimGrid(blockCols, blockRows);  
@@ -195,20 +216,39 @@ int compute_tran_temp(float *MatrixPower,float *MatrixTemp[2], int col, int row,
   float Rx = grid_width / (2.0f * K_SI * t_chip * grid_height);
   float Ry = grid_height / (2.0f * K_SI * t_chip * grid_width);
   float Rz = t_chip / (K_SI * grid_height * grid_width);
+  float Rx_1 = 1.0f/Rx; 
+  float Ry_1 = 1.0f/Ry;
+  float Rz_1 = 1.0f/Rz;
 
   float max_slope = MAX_PD / (FACTOR_CHIP * t_chip * SPEC_HEAT_SI);
   float step = PRECISION / max_slope;
   float t;
 
+  float step_div_Cap = step/Cap;
+
   int src = 1, dst = 0;
-	
+  int count = 0;
+
+  struct timeval tv1, tv2;
+  gettimeofday( &tv1, NULL);
+
   for (t = 0; t < total_iterations; t++) {
     int temp = src;
     src = dst;
     dst = temp;
-    calculate_temp<<<dimGrid, dimBlock>>>( MatrixPower,MatrixTemp[src],MatrixTemp[dst],\
-                                           col,row, Cap,Rx,Ry,Rz,step);
+    calculate_temp<<<dimGrid, dimBlock>>>( MatrixPower,MatrixTemp[src],MatrixTemp[dst],
+                                           col,row, Rx_1,Ry_1,Rz_1,step_div_Cap);
+    
+    //cudaThreadSynchronize();
+
+    count++;
   }
+
+  gettimeofday( &tv2, NULL);
+  double runtime = ((tv2.tv_sec+ tv2.tv_usec/1000000.0)-(tv1.tv_sec+ tv1.tv_usec/1000000.0));
+  printf("Runtime(seconds): %f\n", runtime);
+  printf("kernel has been executed for %d times\n", count);
+
   return dst;
 }
 
@@ -233,65 +273,88 @@ int main(int argc, char** argv)
 
 void run(int argc, char** argv)
 {
-    int size;
-    int grid_rows,grid_cols;
-    float *FilesavingTemp,*FilesavingPower,*MatrixOut; 
-    char *tfile, *pfile, *ofile;
-    
-    int total_iterations = 60;
-    int pyramid_height = 1; // number of iterations
+  int size;
+  int grid_rows,grid_cols;
+  float *FilesavingTemp,*FilesavingPower,*MatrixOut; 
+  char *tfile, *pfile, *ofile;
+  
+  int total_iterations;
 
-    if (argc != 7) {
+/*
+  if (argc != 7) {
+    usage(argc, argv);
+  }
+
+  if((grid_rows = atoi(argv[1]))<=0||
+     (grid_cols = atoi(argv[1]))<=0||
+     (pyramid_height = atoi(argv[2]))<=0||
+     (total_iterations = atoi(argv[3]))<=0) {
       usage(argc, argv);
-    }
+  }
+	      
+  tfile=argv[4];
+  pfile=argv[5];
+  ofile=argv[6];
+*/
 
-    if((grid_rows = atoi(argv[1]))<=0||
-       (grid_cols = atoi(argv[1]))<=0||
-       (pyramid_height = atoi(argv[2]))<=0||
-       (total_iterations = atoi(argv[3]))<=0) {
- 	usage(argc, argv);
-    }
-		
-    tfile=argv[4];
-    pfile=argv[5];
-    ofile=argv[6];
+  grid_rows = SIZE;
+  grid_cols = SIZE; 
+
+  total_iterations = ITER;
+
+  tfile=argv[1];
+  pfile=argv[2];
+  ofile=argv[3];
 	
-    size=grid_rows*grid_cols;
+  size=grid_rows*grid_cols;
 
-    int blockCols = grid_cols/BLOCK_SIZE;
-    int blockRows = grid_rows/BLOCK_SIZE;
+  int blockCols = grid_cols/BLOCK_SIZE;
+  int blockRows = grid_rows/BLOCK_SIZE;
 
-    FilesavingTemp = (float *) malloc(size*sizeof(float));
-    FilesavingPower = (float *) malloc(size*sizeof(float));
-    MatrixOut = (float *) calloc (size, sizeof(float));
+  FilesavingTemp = (float *) malloc(size*sizeof(float));
+  FilesavingPower = (float *) malloc(size*sizeof(float));
+  MatrixOut = (float *) calloc (size, sizeof(float));
 
-    if( !FilesavingPower || !FilesavingTemp || !MatrixOut) {
-        fatal("unable to allocate memory");
-    }
+  if( !FilesavingPower || !FilesavingTemp || !MatrixOut) {
+    fatal("unable to allocate memory");
+  }
 
-    printf( "gridSize: [%d, %d]\nblockGrid:[%d, %d]\ntargetBlock:[%d, %d]\n",\
-	    grid_cols, grid_rows,  blockCols, blockRows, BLOCK_SIZE, BLOCK_SIZE);
-	
-    readinput(FilesavingTemp, grid_rows, grid_cols, tfile);
-    readinput(FilesavingPower, grid_rows, grid_cols, pfile);
+#ifdef VERBOSE
+  printf( "gridSize: [%d, %d]\nblockGrid:[%d, %d]\ntargetBlock:[%d, %d]\n",
+	  grid_cols, grid_rows,  blockCols, blockRows, BLOCK_SIZE, BLOCK_SIZE);
+#endif
+ 
+  readinput(FilesavingTemp, grid_rows, grid_cols, tfile);
+  readinput(FilesavingPower, grid_rows, grid_cols, pfile);
 
-    float *MatrixTemp[2], *MatrixPower;
-    cudaMalloc((void**)&MatrixTemp[0], sizeof(float)*size);
-    cudaMalloc((void**)&MatrixTemp[1], sizeof(float)*size);
-    cudaMemcpy(MatrixTemp[0], FilesavingTemp, sizeof(float)*size, cudaMemcpyHostToDevice);
+  float *MatrixTemp[2], *MatrixPower;
+  cudaMalloc((void**)&MatrixTemp[0], sizeof(float)*size);
+  cudaMalloc((void**)&MatrixTemp[1], sizeof(float)*size);
+  cudaMemcpy(MatrixTemp[0], FilesavingTemp, sizeof(float)*size, cudaMemcpyHostToDevice);
 
-    cudaMalloc((void**)&MatrixPower, sizeof(float)*size);
-    cudaMemcpy(MatrixPower, FilesavingPower, sizeof(float)*size, cudaMemcpyHostToDevice);
-    printf("Start computing the transient temperature\n");
-    int ret = compute_tran_temp( MatrixPower,MatrixTemp,grid_cols,grid_rows, \
-	                         total_iterations, blockCols, blockRows);
-    printf("Ending simulation\n");
-    cudaMemcpy(MatrixOut, MatrixTemp[ret], sizeof(float)*size, cudaMemcpyDeviceToHost);
+  cudaMalloc((void**)&MatrixPower, sizeof(float)*size);
+  cudaMemcpy(MatrixPower, FilesavingPower, sizeof(float)*size, cudaMemcpyHostToDevice);
 
-    writeoutput(MatrixOut,grid_rows, grid_cols, ofile);
+#ifdef VERBOSE
+  printf("Start computing the transient temperature\n");
+#endif
 
-    cudaFree(MatrixPower);
-    cudaFree(MatrixTemp[0]);
-    cudaFree(MatrixTemp[1]);
-    free(MatrixOut);
+
+
+  /* Main computation */
+  int ret = compute_tran_temp( MatrixPower, MatrixTemp, grid_cols, grid_rows, 
+			       total_iterations, blockCols, blockRows);
+
+
+#ifdef VERBOSE
+  printf("Ending simulation\n");
+#endif
+  cudaMemcpy(MatrixOut, MatrixTemp[ret], sizeof(float)*size, cudaMemcpyDeviceToHost);
+
+  writeoutput(MatrixOut,grid_rows, grid_cols, ofile);
+
+  cudaFree(MatrixPower);
+  cudaFree(MatrixTemp[0]);
+  cudaFree(MatrixTemp[1]);
+  free(MatrixOut);
 }

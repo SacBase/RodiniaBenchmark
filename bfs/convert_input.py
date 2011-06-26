@@ -49,6 +49,9 @@ while j < number_of_edges:
     line = infile.readline();
     components = line.split();
 
+    if int(components[0]) == 0:
+        print "found node 0 as a son!" + `j`;
+
     graph_edges.append(components[0]);
 
     j = j + 1;

@@ -1,0 +1,170 @@
+use StdIO: all;
+use Array: all;
+
+/* This is a direct translation of the OpenMP version in
+ * Rodinia. Basically, each OpenMP parallel for loop has
+ * been converted into a parallel Withloop in SAC.
+ */
+
+#ifdef DOUBLE
+#define DBL double
+#define TOD tod
+#else 
+#define DBL float
+#define TOD tof
+#endif
+
+#ifndef SIZE
+#define SIZE 1024
+#endif
+
+#ifndef ITER
+#define ITER 5000
+#endif
+
+/* maximum power density possible (say 300W for a 10mm x 10mm chip)	*/
+/* #define MAX_PD	      (TOD(3.0e6)) */
+#define MAX_PD	      (TOD(3000000.0)) 
+/* required precision in degrees	*/
+#define PRECISION     (TOD(0.001))
+/* #define SPEC_HEAT_SI  (TOD(1.75e6)) */
+#define SPEC_HEAT_SI  (TOD(1750000.0)) 
+#define K_SI          (TOD(100))
+/* capacitance fitting factor	*/
+#define FACTOR_CHIP   (TOD(0.5))
+
+/* Single iteration of the transient solver in the grid model.
+ * advances the solution of the discretized difference equations 
+ * by one time step
+ */
+
+inline
+DBL[SIZE,SIZE] single_iteration( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power,
+                                 DBL amb_temp, DBL Rx_1, DBL Ry_1, DBL Rz_1, DBL step_div_Cap)
+{
+    result = with {
+               ([0,0] <= iv=[r,c] < [SIZE, SIZE]) {
+               /*  Corner 1  */
+               if ( (r == 0) && (c == 0) ) {
+                 delta = (step_div_Cap) * (power[0,0] +
+                         (temp[0,1] - temp[0,0]) * Rx_1 +
+                         (temp[1,0] - temp[0,0]) * Ry_1 +
+                         (amb_temp - temp[0,0]) * Rz_1);
+               }  
+               /*  Corner 2  */
+               else if ((r == 0) && (c == SIZE-1)) {
+                 delta = (step_div_Cap) * (power[0,c] +
+                         (temp[0,c-1] - temp[0,c]) * Rx_1 +
+                         (temp[1,c] - temp[0,c]) * Ry_1 +
+                         (amb_temp - temp[0,c]) * Rz_1);
+               }  /*  Corner 3  */
+               else if ((r == SIZE-1) && (c == SIZE-1)) {
+                 delta = (step_div_Cap) * (power[r,c] + 
+                         (temp[r,c-1] - temp[r,c]) * Rx_1 + 
+                         (temp[r-1,c] - temp[r,c]) * Ry_1 + 
+                         (amb_temp - temp[r,c]) * Rz_1);					
+               }  /*  Corner 4  */
+               else if ((r == SIZE-1) && (c == 0)) {
+                 delta = (step_div_Cap) * (power[r,0] + 
+                         (temp[r,1] - temp[r,0]) * Rx_1 + 
+                         (temp[r-1,0] - temp[r,0]) * Ry_1 + 
+                         (amb_temp - temp[r,0]) * Rz_1);
+               }  /*  Edge 1  */
+               else if (r == 0) {
+                 delta = (step_div_Cap) * (power[0,c] + 
+                         (temp[0,c+1] + temp[0,c-1] - TOD(2.0)*temp[0,c]) * Rx_1 + 
+                         (temp[1,c] - temp[0,c]) * Ry_1 + 
+                         (amb_temp - temp[0,c]) * Rz_1);
+               }  /*  Edge 2  */
+               else if (c == SIZE-1) {
+                 delta = (step_div_Cap) * (power[r,c] + 
+                         (temp[r+1,c] + temp[r-1,c] - TOD(2.0)*temp[r,c]) * Ry_1 + 
+                         (temp[r,c-1] - temp[r,c]) * Rx_1 + 
+                         (amb_temp - temp[r,c]) * Rz_1);
+               }  /*  Edge 3  */
+               else if (r == SIZE-1) {
+                 delta = (step_div_Cap) * (power[r,c] + 
+                         (temp[r,c+1] + temp[r,c-1] - TOD(2.0)*temp[r,c]) * Rx_1 + 
+                         (temp[r-1,c] - temp[r,c]) * Ry_1 + 
+                         (amb_temp - temp[r,c]) * Rz_1);
+               }  /*  Edge 4  */
+               else if (c == 0) {
+                 delta = (step_div_Cap) * (power[r,0] + 
+                         (temp[r+1,0] + temp[r-1,0] - TOD(2.0)*temp[r,0]) * Ry_1 + 
+                         (temp[r,1] - temp[r,0]) * Rx_1 + 
+                         (amb_temp - temp[r,0]) * Rz_1);
+               }  /*  Inside the chip  */
+               else {
+                 delta = (step_div_Cap) * (power[r,c] + 
+                         (temp[r+1,c] + temp[r-1,c] - TOD(2.0)*temp[r,c]) * Ry_1 + 
+                         (temp[r,c+1] + temp[r,c-1] - TOD(2.0)*temp[r,c]) * Rx_1 + 
+                         (amb_temp - temp[r,c]) * Rz_1);
+               }
+               res = temp[r,c]+delta;                
+             }:res;
+   }: genarray([SIZE, SIZE], TOD(0.0));
+
+   return( result);
+}
+
+/* Transient solver driver routine: simply converts the heat 
+ * transfer differential equations to difference equations 
+ * and solves the difference equations by iterating
+ */
+/*
+inline
+*/
+DBL[SIZE,SIZE] compute_tran_temp( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power) 
+{
+    /* chip parameters	*/
+    t_chip = TOD(0.0005);
+    chip_height = TOD(0.016);
+    chip_width = TOD(0.016);
+    /* ambient temperature, assuming no package at all	*/
+    amb_temp = TOD(80.0);
+
+    grid_height = chip_height / TOD(SIZE);
+    grid_width = chip_width / TOD(SIZE);
+
+    Cap = FACTOR_CHIP * SPEC_HEAT_SI * t_chip * grid_width * grid_height;
+    Rx = grid_width / (TOD(2.0) * K_SI * t_chip * grid_height);
+    Ry = grid_height / (TOD(2.0) * K_SI * t_chip * grid_width);
+    Rz = t_chip / (K_SI * grid_height * grid_width);
+    Rx_1 = TOD(1.0)/Rx; 
+    Ry_1 = TOD(1.0)/Ry;
+    Rz_1 = TOD(1.0)/Rz;
+
+    max_slope = MAX_PD / (FACTOR_CHIP * t_chip * SPEC_HEAT_SI);
+    sp = PRECISION / max_slope;
+
+    step_div_Cap = sp/Cap;
+
+    for (i = 0; i < ITER ; i++) {
+      temp = single_iteration( temp, power, amb_temp, Rx_1, Ry_1, Rz_1, step_div_Cap);
+    }
+  
+    return( temp);
+}
+
+int main()
+{
+  DBL[SIZE, SIZE] temp; 
+  DBL[SIZE, SIZE] power; 
+
+  temp = FibreScanFloatArray();
+  power = FibreScanFloatArray();
+
+  temp = compute_tran_temp(temp, power);
+
+#ifdef OUTPUT
+  for (i=0; i < SIZE; i++) 
+    for (j=0; j < SIZE; j++) {
+      printf("%f\n", temp[i, j]);
+  }
+#else
+  print(temp[0,0]);
+#endif
+
+  return( 0);
+}
+
