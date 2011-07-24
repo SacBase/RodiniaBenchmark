@@ -19,7 +19,7 @@ int main()
 
   mat = FibreScanFloatArray();
 
-  for( i = 0; i < 32; i++) {
+  for( i = 0; i < SIZE; i++) {
 #ifdef C_IMP /* C implementation */
     for (j = i; j < SIZE; j++) {
       summ = mat[i, j];

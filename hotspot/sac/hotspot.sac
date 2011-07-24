@@ -42,7 +42,7 @@ inline
 DBL[SIZE,SIZE] single_iteration( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power,
                                  DBL amb_temp, DBL Rx_1, DBL Ry_1, DBL Rz_1, DBL step_div_Cap)
 {
-    result = with {
+    temp = with {
                ([0,0] <= iv=[r,c] < [SIZE, SIZE]) {
                /*  Corner 1  */
                if ( (r == 0) && (c == 0) ) {
@@ -102,9 +102,9 @@ DBL[SIZE,SIZE] single_iteration( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power,
                }
                res = temp[r,c]+delta;                
              }:res;
-   }: genarray([SIZE, SIZE], TOD(0.0));
+   }: modarray(temp);
 
-   return( result);
+   return( temp);
 }
 
 /* Transient solver driver routine: simply converts the heat 
