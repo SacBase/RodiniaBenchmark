@@ -1,0 +1,764 @@
+use Array: all;
+use StdIO: all;
+use Math: all;
+
+/* Defines the region in the video frame containing the blood vessel */
+#define TOP 110
+#define BOTTOM 328
+
+/* The number of sample points per ellipse */
+#define NPOINTS 150
+/* The expected radius (in pixels) of a cell */
+#define RADIUS 10
+/* The range of acceptable radii */
+#define MIN_RAD RADIUS - 2
+#define MAX_RAD RADIUS * 2
+/* The number of different sample ellipses to try */
+#define NCIRCLES 7
+
+#define PI 3.14159
+
+/* Given a matrix, return the matrix containing an approximation of the gradient matrix dM/dx */
+double[.,.] gradient_x(double[.,.] input)
+{
+  result = with {
+             ([0,0] <= iv=[i,j] < shape(input)) {
+	       if(j==0) {
+                 res = input[i,j+1]-input[i,j];
+               }
+	       else if(j==(shape(input)[1]-1)) {
+                 res = input[i,j]-input[i,j-1];
+               }
+	       else {
+                 res = (input[i,j+1]-input[i,j-1])/2.0;
+               }
+             }:res;
+           }:genarray(shape(input), 0.0); 
+
+  return( result);
+}
+
+/* Given a matrix, return the matrix containing an approximation of the gradient matrix dM/dy */
+double[.,.] gradient_y(double[.,.] input)
+{
+  result = with {
+             ([0,0] <= iv=[i,j] < shape(input)) {
+	       if(i==0) {
+                 res = input[i+1,j]-input[i,j];
+               }
+	       else if(i==(shape(input)[0]-1)) {
+                 res = input[i,j]-input[i-1,j];
+               }
+	       else {
+                 res = (input[i+1,j]-input[i-1,j])/2.0;
+               }
+             }:res;
+           }:genarray(shape(input), 0.0); 
+
+  return( result);
+}
+
+/* Flips the specified image and crops it to the specified dimensions */
+double[.,.] chop_flip_image(int[.,.] image, int height, int top, int bottom, int left, int right, bool scaled) 
+{
+  Y = bottom - top + 1; 
+  X = right - left + 1; 
+
+  result = with {
+             ([0,0]<= iv=[i,j] < [Y,X]):tod(image[(height-(i+top)), (j+left)]);
+           }:genarray([Y,X], 0.0);
+
+  if( scaled) {
+    result = result * (1.0/255.0);
+  }  
+
+  return( result);
+}
+
+double[.,.] get_frame(bool cropped, bool scaled, File img_file) 
+{
+  int[.,.] image_buf;
+
+  image_buf = FibreScanIntArray(img_file);
+
+  height = shape(image_buf)[0];
+  widthh = shape(image_buf)[1];
+
+  if (cropped) {
+    /* Crop and flip image so we deal only with the interior of the vein */
+    image_chopped = chop_flip_image(image_buf, height, TOP, BOTTOM, 0, widthh - 1, scaled);
+  } else {
+    /* Just flip the image */
+    image_chopped = chop_flip_image(image_buf, height, 0, height - 1, 0, widthh - 1, scaled);
+  }
+  
+  return( image_chopped);
+}
+
+/* Given x- and y-gradients of a video frame, computes the GICOV
+ * score for each sample ellipse at every pixel in the frame */
+double[.,.] ellipsematching(double[.,.] grad_x, double[.,.] grad_y) 
+{
+  /* Compute the sine and cosine of the angle to each point in each sample circle
+   * (which are the same across all sample circles) */
+  theta = with {
+            ([0] < iv=[n] < [NPOINTS]):(tod(n)*2.0*PI)/tod(NPOINTS);
+          }:genarray([NPOINTS]);
+
+  sin_angle = with {
+                ([0] < iv=[n] < [NPOINTS]):sin(theta[n]);
+              }:genarray([NPOINTS]);
+
+  /* why cos(0) is not 1.0 ???? */
+  cos_angle = with {
+                ([0] < iv=[n] < [NPOINTS]):cos(theta[n]);
+              }:genarray([NPOINTS]);
+  cos_angle[0] = 1.0;
+
+  /* Compute the (x,y) pixel offsets of each sample point in each sample circle */
+  tX = with {
+         ([0,0] <= iv=[k,n] <  [NCIRCLES, NPOINTS]) {
+           rad = tod(MIN_RAD + 2*k); 
+           res = toi(cos(theta[n])*rad);
+         }:res;
+       }:genarray([NCIRCLES, NPOINTS]);  
+
+  tY = with {
+         ([0,0] <= iv=[k,n] <  [NCIRCLES, NPOINTS]) {
+           rad = tod(MIN_RAD + 2*k); 
+           res = toi(sin(theta[n])*rad);
+         }:res;
+       }:genarray([NCIRCLES, NPOINTS]);  
+
+  MaxR = MAX_RAD + 2;
+
+  gicov = with {
+            ( [MaxR, MaxR] <= iv=[i,j] < [shape(grad_x)[0]-MaxR, shape(grad_x)[1]-MaxR]) {
+	      max_GICOV = 0.0;
+
+	      for (k = 0; k < NCIRCLES; k++) {
+		sum = 0.0;
+                M2 = 0.0;
+                mean = 0.0;		
+		
+		for (n = 0; n < NPOINTS; n++) {
+		  /* Determine the x- and y-coordinates of the current sample point */
+		  y = i + tY[k, n];
+		  x = j + tX[k, n];
+		  
+		  /* Compute the combined gradient value at the current sample point */
+		  p = grad_x[y,x] * cos_angle[n] + grad_y[y,x] * sin_angle[n]; 
+		  
+		  /* Update the running total */
+		  sum += p;
+		  
+		  /* Partially compute the variance */
+		  delta = p - mean;
+		  mean = mean + (delta / tod(n + 1));
+		  M2 = M2 + (delta * (p - mean));
+		}
+		
+		/* Finish computing the mean */
+		mean = sum / tod(NPOINTS);
+		
+		/* Finish computing the variance */
+		var = M2 / tod(NPOINTS - 1);
+		
+		/* Keep track of the maximal GICOV value seen so far */
+		if (((mean * mean) / var) > max_GICOV) max_GICOV = (mean * mean) / var;
+	      }
+	      
+	      res = max_GICOV;
+            }:res;
+          }:genarray(shape(grad_x));
+
+  return( gicov);
+}
+
+double[.,.] structuring_element(int radius) 
+{
+  size = radius*2+1;
+
+  result = with {
+             ([0,0] <= iv=[i,j] < [size, size]) {
+	       if(sqrt(tod((i-radius)*(i-radius)+(j-radius)*(j-radius))) <= tod(radius)) {
+		 res = 1.0;
+               }
+	       else {
+		 res = 0.0;
+               }
+             }:res;
+           }:genarray([size,size]);
+
+  return( result);
+}
+
+/* Performs an image dilation on the specified matrix
+ * using the specified structuring element */
+double[.,.] dilate_f(double[.,.] img_in, double[.,.] strel) 
+{
+  /* Find the center of the structuring element */
+  el_center_i = shape(strel)[0] / 2;
+  el_center_j = shape(strel)[1] / 2;
+
+  dilated = with {
+              ([0,0] <= iv=[i,j] < shape(img_in)) {
+                max = 0.0;
+		for (el_i = 0; el_i < shape(strel)[0]; el_i++) {
+		  for (el_j = 0; el_j < shape(strel)[1]; el_j++) {
+		    y = i - el_center_i + el_i;
+		    x = j - el_center_j + el_j;
+
+		    if (y >=0 && x >= 0 && y < shape(img_in)[0] && x < shape(img_in)[1] && strel[el_i, el_j] != 0.0) {
+		      temp = img_in[y, x];
+		      if (temp > max) {
+			max = temp;
+		      }
+		    }
+		  }
+		}
+                res = max;
+              }:res;
+            }:genarray(shape(img_in));
+
+  return( dilated);
+}
+
+/* M = # of sampling points in each segment
+ * N = number of segment of curve
+ * Get special TMatrix */
+/*
+double[.,.] TMatrix(int N, int M)
+{
+  aindex = malloc(N*sizeof(int));
+  bindex = malloc(N*sizeof(int));
+  cindex = malloc(N*sizeof(int));
+  dindex = malloc(N*sizeof(int));
+
+
+  aindex = with {
+             ([1] <= iv=[i] < [N]):(i-1);
+           }:genarray([N]);
+  aindex[0] = N-1;
+
+  bindex = with {
+             ([0] <= iv=[i] < [N]):i;
+           }:genarray([N]);
+
+  cindex = with {
+             ([0] <= iv=[i] < [N-1]):(i+1);
+           }:genarray([N]);
+  cindex[N-1] = 0;
+
+  dindex = with {
+             ([0] <= iv=[i] < [N-2]):(i+2);
+           }:genarray([N]);
+  dindex[N-2] = 0;
+  dindex[N-1] = 1;
+
+
+  len = N*M;
+  B = genarray([len,N], 0.0);
+  LB = genarray([M,N], 0.0);
+
+  for(i = 0; i < N; i++) {
+    LB = with {
+           ([0,0] <= iv < [M,N]]):0.0;
+         }:modarray(LB);
+
+    for(j = 0; j < M; j++) {
+      s = tod(j) / tod(M);
+
+      a = (-1.0*s*s*s + 3.0*s*s - 3.0*s + 1.0) / 6.0;
+      b = (3.0*s*s*s - 6.0*s*s + 4.0) / 6.0;
+      c = (-3.0*s*s*s + 3.0*s*s + 3.0*s + 1.0) / 6.0;
+      d = s*s*s / 6.0;
+
+      LB[j,aindex[j]] = a;
+      LB[j,bindex[j]] = b;
+      LB[j,cindex[j]] = c;
+      LB[j,dindex[j]] = d;
+    }
+
+    for(m = i*M; m < (i+1)*M; m++) {
+      for(n = 0; n < N; n++) {
+        B[m,n] = LB[m%M, n]; 
+      }
+    }
+  }
+
+  B_TEMP = mtrm_mlt(B, B, B_TEMP); 
+  B_TRAN = with {
+             ([0,0] < iv=[i,j] < [N, len]):B[j,i];
+           }:genarray([N, len]);
+  B_TEMP = with {
+             ([0,0] <= iv=[i,j] < [N,N]):sum(B_TRAN[i,.]*B[.,j]);
+           }:genarray([N,N]);
+
+  B_TEMP_INV = m_inverse(B_TEMP, B_TEMP_INV);
+  B_RET = mmtr_mlt(B_TEMP_INV, B, B_RET);
+
+  return( B_RET);
+}
+*/
+
+/* Regularized version of the Heaviside step function,
+ * parameterized by a small positive number 'e' */
+double[.,.] heaviside(double[.,.] H, double[.,.] z, double v, double e) 
+{
+  m = shape(z)[0];
+  n = shape(z)[1];
+ 
+  /* Precompute constants to avoid division in the for loops below */
+  one_over_pi = 1.0 / PI;
+  one_over_e = 1.0 / e;
+  
+  /* Compute H = (1 / pi) * atan((z * v) / e) + 0.5 */
+  H = with {
+        ([0,0] <= iv=[i,j] < [m,n]){
+          z_val = z[i,j] * v;
+          H_val = one_over_pi * atan(z_val * one_over_e) + 0.5; 
+        }:H_val;
+      }:modarray(H);
+ 
+  return( H);
+}
+
+double[.,.] MGVF(double[.,.] I, double vx, double vy) 
+{
+  /*
+  % MGVF calculate the motion gradient vector flow (MGVF) 
+  %  for the image 'I'
+  %
+  % Based on the algorithm in:
+  %  Motion gradient vector flow: an external force for tracking rolling 
+  %   leukocytes with shape and size constrained active contours
+  %  Ray, N. and Acton, S.T.
+  %  IEEE Transactions on Medical Imaging
+  %  Volume: 23, Issue: 12, December 2004 
+  %  Pages: 1466 - 1478
+  %
+  % INPUTS
+  %   I...........image
+  %   vx,vy.......velocity vector
+  %   
+  % OUTPUT
+  %   IMGVF.......MGVF vector field as image
+  */
+
+  /* Constants */
+  converge = 0.00001;
+  mu = 0.5;
+  epsilon = 0.0000000001;
+  lambda = 8.0 * mu + 1.0;
+  /* Smallest positive value expressable in double-precision */
+  eps = pow(2.0, -52.0);
+  /* Maximum number of iterations to compute the MGVF matrix */
+  iterations = 500;
+  
+  m = shape(I)[0];
+  n = shape(I)[1];
+
+  /* Find the maximum and minimum values in I */
+  Imax = maxval(I);
+  Imin = minval(I);
+ 
+  /* Normalize the image I */
+  scale = 1.0 / (Imax - Imin + eps);
+  I = with {
+        ([0,0] <= iv=[i,j] < [m,n]):(I[i,j]-Imin)*scale;
+      }:modarray(I);
+
+  /* Initialize the output matrix IMGVF with values from I */
+  IMGVF = with {
+            ([0,0] <= iv=[i,j] < [m,n]):I[i,j];
+          }:genarray([m.n]);
+	
+  /* Precompute row and column indices for the
+   * neighbor difference computation below */
+  rowU = with {
+           ([1] <= iv=[i] < [m]):(i-1);
+           ([0] <= iv=[i] < [1]):0;
+         }:genarray([m]);
+  
+  rowD = with {
+           ([0] <= iv=[i] < [m-1]):(i+1);
+           ([m-1] <= iv=[i] < [m]):(m-1);
+         }:genarray([m]);
+
+  colL = with {
+           ([1] <= iv=[j] < [n]):(j-1);
+           ([0] <= iv=[j] < [1]):0;
+         }:genarray([n]);
+
+  colR = with {
+           ([0] <= iv=[j] < [n-1]):(j+1);
+           ([n-1] <= iv=[j] < [n]):(n-1);
+         }:genarray([n]);
+  
+  /* Allocate matrices used in the while loop below */
+  U    = genarray([m,n], 0.0);
+  D    = genarray([m,n], 0.0);
+  L    = genarray([m,n], 0.0);
+  R    = genarray([m,n], 0.0);
+  UR   = genarray([m,n], 0.0);
+  DR   = genarray([m,n], 0.0);
+  UL   = genarray([m,n], 0.0);
+  DL   = genarray([m,n], 0.0);
+  UHe  = genarray([m,n], 0.0);
+  DHe  = genarray([m,n], 0.0);
+  LHe  = genarray([m,n], 0.0);
+  RHe  = genarray([m,n], 0.0);
+  URHe = genarray([m,n], 0.0);
+  DRHe = genarray([m,n], 0.0);
+  ULHe = genarray([m,n], 0.0);
+  DLHe = genarray([m,n], 0.0);
+
+  /* Precompute constants to avoid division in the for loops below */
+  mu_over_lambda = mu / lambda;
+  one_over_lambda = 1.0 / lambda;
+ 
+  /* Compute the MGVF */
+  iter = 0;
+  mean_diff = 1.0;
+  while ((iter < iterations) && (mean_diff > converge)) { 
+      
+    /* Compute the difference between each pixel and its eight neighbors */
+    U,D,L,R,UR,DR,UL,DL = 
+      with {
+        ([0,0] <= iv=[i,j] < [m,n]) {
+          subtrahend = IMGVF[i,j];
+          u = IMGVF[rowU[i],j] - subtrahend; 
+          d = IMGVF[rowD[i],j] - subtrahend; 
+          l = IMGVF[i, colL[j]] - subtrahend; 
+          r = IMGVF[i, colR[j]] - subtrahend; 
+          ur = IMGVF[rowU[i], colR[j]] - subtrahend; 
+          dr = IMGVF[rowD[i], colR[j]] - subtrahend; 
+          ul = IMGVF[rowU[i], colL[j]] - subtrahend; 
+          dl = IMGVF[rowD[i], colL[j]] - subtrahend; 
+        }:(u,d,l,r,ur,dr,ul,dl);
+      }:(modarray(U),
+         modarray(D),
+         modarray(L),
+         modarray(R),
+         modarray(UR),
+         modarray(DR),
+         modarray(UL),
+         modarray(DL)
+        );
+    
+    /* Compute the regularized heaviside version of the matrices above */
+    UHe =  heaviside( UHe,  U, -vy,      epsilon);
+    DHe =  heaviside( DHe,  D,  vy,      epsilon);
+    LHe =  heaviside( LHe,  L, -vx,      epsilon);
+    RHe =  heaviside( RHe,  R,  vx,      epsilon);
+    URHe = heaviside(URHe, UR,  vx - vy, epsilon);
+    DRHe = heaviside(DRHe, DR,  vx + vy, epsilon);
+    ULHe = heaviside(ULHe, UL, -vx - vy, epsilon);
+    DLHe = heaviside(DLHe, DL,  vy - vx, epsilon);
+    
+    /* Update the IMGVF matrix */
+    for (i = 0; i < m; i++) {
+      for (j = 0; j < n; j++) {
+	/* Store the old value so we can compute the difference later */
+	old_val = m_get_val(IMGVF, i, j);
+	
+	/* Compute IMGVF += (mu / lambda)(UHe .*U  + DHe .*D  + LHe .*L  + RHe .*R +
+	 *                                URHe.*UR + DRHe.*DR + ULHe.*UL + DLHe.*DL);
+         */
+	vU  = m_get_val(UHe,  i, j) * m_get_val(U,  i, j);
+	vD  = m_get_val(DHe,  i, j) * m_get_val(D,  i, j);
+	vL  = m_get_val(LHe,  i, j) * m_get_val(L,  i, j);
+	vR  = m_get_val(RHe,  i, j) * m_get_val(R,  i, j);
+	vUR = m_get_val(URHe, i, j) * m_get_val(UR, i, j);
+	vDR = m_get_val(DRHe, i, j) * m_get_val(DR, i, j);
+	vUL = m_get_val(ULHe, i, j) * m_get_val(UL, i, j);
+	vDL = m_get_val(DLHe, i, j) * m_get_val(DL, i, j);				
+	vHe = old_val + mu_over_lambda * (vU + vD + vL + vR + vUR + vDR + vUL + vDL);
+	
+	/* Compute IMGVF -= (1 / lambda)(I .* (IMGVF - I)) */
+	vI = m_get_val(I, i, j);
+	new_val = vHe - (one_over_lambda * vI * (vHe - vI));
+	m_set_val(IMGVF, i, j, new_val);
+	
+	/* Keep track of the absolute value of the differences
+	 * between this iteration and the previous one */
+	total_diff += fabs(new_val - old_val);
+      }
+    }
+  
+    IMGVF_old = IMGVF;
+
+    IMGVF = with {
+              ([0,0] <= iv=[i,j] < [m,n]) {
+		/* Compute IMGVF += (mu / lambda)(UHe .*U  + DHe .*D  + LHe .*L  + RHe .*R +
+		 *                                URHe.*UR + DRHe.*DR + ULHe.*UL + DLHe.*DL);
+		 */
+		vU  = UHe [i, j] * U [i, j];
+		vD  = DHe [i, j] * D [i, j];
+		vL  = LHe [i, j] * L [i, j];
+		vR  = RHe [i, j] * R [i, j];
+		vUR = URHe[i, j] * UR[i, j];
+		vDR = DRHe[i, j] * DR[i, j];
+		vUL = ULHe[i, j] * UL[i, j];
+		vDL = DLHe[i, j] * DL[i, j];				
+		vHe = old_val + mu_over_lambda * (vU + vD + vL + vR + vUR + vDR + vUL + vDL);
+		
+		/* Compute IMGVF -= (1 / lambda)(I .* (IMGVF - I)) */
+		vI = I[i, j];
+		new_val = vHe - (one_over_lambda * vI * (vHe - vI));
+              }:new_val;;
+            }:modarray(IMGVF);
+
+    total_diff = sum(fabs(IMGVF-IMGVF_old));
+    
+    /* Compute the mean absolute difference between this iteration
+     * and the previous one to check for convergence */
+    mean_diff = total_diff / tod(m * n);
+
+    iter++;
+  }
+	
+  return( IMGVF);
+}
+
+void ellipsetrack(File img_file, double[.] xc0, double[.] yc0, int Nc, int R, int Np, int Nf) 
+{
+  /*
+  % ELLIPSETRACK tracks cells in the movie specified by 'video', at
+  %  locations 'xc0'/'yc0' with radii R using an ellipse with Np discrete
+  %  points, starting at frame number one and stopping at frame number 'Nf'.
+  %
+  % INPUTS:
+  %   video.......pointer to avi video object
+  %   xc0,yc0.....initial center location (Nc entries)
+  %   Nc..........number of cells
+  %   R...........initial radius (10.0)
+  %   Np..........nbr of snaxels points per snake (20)
+  %   Nf..........nbr of frames in which to track
+  %
+  */
+	
+  /* Compute angle parameter */
+  t = with {
+        ([0] <= iv=[i] < [Np]):tod(i)*2.0*PI/tod(Np);
+      }:genarray([Np]);
+
+  Nf1 = Nf+1;
+ 
+  xc = with {
+         ([0,0] <= iv=[i,j] < [Nc,1]):xc0[i];
+       }:genarray([Nc,Nf1],0.0);
+  yc = with {
+         ([0,0] <= iv=[i,j] < [Nc,1]):yc0[i];
+       }:genarray([Nc,Nf1],0.0);
+  r = with {
+         ([0,0,0] <= iv=[i,j,k] < [Nc,Np,1]):tod(R);
+      }:genarray([Nc,Np,Nf1],0.0);
+
+	
+  /* Generate ellipse points for each cell */
+  x = with {
+         ([0,0,0] <= iv=[i,j,k] < [Nc,Np,1]):xc[i,0]+(r[i,j,0]*cos(t[j]));
+      }:genarray([Nc,Np,Nf1],0.0);
+  y = with {
+         ([0,0,0] <= iv=[i,j,k] < [Nc,Np,1]):yc[i,0]+(r[i,j,0]*sin(t[j]));
+      }:genarray([Nc,Np,Nf1],0.0);
+
+  /* Process each frame */
+  cell_num;
+  for (frame_num = 1; frame_num <= Nf; frame_num++) {	 
+    printf("\rProcessing frame %d / %d", frame_num, Nf);
+    
+    /* Get the current video frame and its dimensions */
+    I = get_frame(false, true, img_file);
+    Ih = shape(I)[0];
+    Iw = shape(I)[1];
+     
+    /* Set the current positions equal to the previous positions */		
+    xc = with {
+           ([0,frame_num] <= iv=[i,j] < [Nc,frame_num+1]):xc[i,frame_num-1];
+         }:modarray(xc);
+    yc = with {
+           ([0,frame_num] <= iv=[i,j] < [Nc,frame_num+1]):yc[i,frame_num-1];
+         }:modarray(yc);
+    r = with {
+          ([0,0,frame_num] <= iv=[i,j,k] < [Nc,Np,frame_num+1]):r[i,j,frame_num-1];
+        }:modarray(r);
+      
+    /* Track each cell */
+    for (cell_num = 0; cell_num < Nc; cell_num++) {
+      /* Make copies of the current cell's location */
+      xci = xc[cell_num, frame_num];
+      yci = yc[cell_num, frame_num];
+      ri = with {
+             ([0] <= iv=[i] <[Np]):r[cell_num,frame_num];
+           }:genarray([Np]);
+
+      /* Add up the last ten y-values for this cell
+       * (or fewer if there are not yet ten previous frames) */
+      ycavg = 0.0;
+      for (i = (frame_num > 10 ? frame_num - 10 : 0); i < frame_num; i++) {
+	ycavg += yc[cell_num, i];
+      }
+      /* Compute the average of the last ten y-values
+       * (this represents the expected y-location of the cell) */
+      ycavg = ycavg / tod(frame_num > 10 ? 10 : frame_num);
+      
+      /* Determine the range of the subimage surrounding the current position */
+      u1 = toi(max(xci - 4.0 * tod(R) + 0.5, 0.0 ));
+      u2 = toi(min(xci + 4.0 * tod(R) + 0.5, tod(Iw) - 1.0));
+      v1 = toi(max(yci - 2.0 * tod(R) + 1.5, 0.0 ));    
+      v2 = toi(min(yci + 2.0 * tod(R) + 1.5, tod(Ih) - 1.0));
+      
+      /* Extract the subimage */
+      sub_v = v2-v1+1;
+      sub_u = u2-u1+1;
+      Isub = with {
+               ([0,0] <= iv=[i,j] < [sub_v,sub_u]):I[v1+i,u1+j];
+             }:genarray([sub_v,sub_u]);
+      
+      /* Compute the subimage gradient magnitude */			
+      Ix = gradient_x(Isub);
+      Iy = gradient_y(Isub);
+      IE = with {
+             ([0,0] <= iv[i,j] < shape(Isub)) {
+               temp_x = Ix[i,j];
+               temp_y = Iy[i,j];
+               res = sqrt(temp_x*temp_x+temp_y*temp_y);
+             };res;
+           }:genarray(shape(Isub));
+      
+      /* Compute the motion gradient vector flow (MGVF) edgemaps */
+      IMGVF = MGVF(IE, 1.0, 1.0);
+      
+      /* Determine the position of the cell in the subimage */			
+      xci = xci - tod(u1);
+      yci = yci - tod(v1 - 1);
+      ycavg = ycavg - tod(v1 - 1);
+      
+      /* Evolve the snake */
+      xci, yci, ri = ellipseevolve(IMGVF, xci, yci, ri, t, Np, tod(R), ycavg);
+      
+      /* Compute the cell's new position in the full image */
+      xci = xci + tod(u1);
+      yci = yci + tod(v1 - 1);
+      
+      /* Store the new location of the cell and the snake */
+      xc[cell_num, frame_num] = xci;
+      yc[cell_num, frame_num] = yci;
+      for (j = 0; j < Np; j++) {
+	r[cell_num, j, frame_num] = ri[j];
+	x[cell_num, j, frame_num] = xc[cell_num, frame_num] + (ri[j] * cos(t[j]));
+	y[cell_num, j, frame_num] = yc[cell_num, frame_num] + (ri[j] * sin(t[j]));
+      }
+      
+      /* Output the updated center of each cell */
+      /* printf("%d,%f,%f\n", cell_num, xci[cell_num], yci[cell_num]); */
+    }
+		
+    /* Output a new line to visually distinguish the output from different frames */
+    /* printf("\n"); */
+  }
+}
+
+int main()
+{
+  err, img_file = fopen("../input/sac_frames.dat", "r");
+
+  image_chopped = get_frame(true, false, img_file);
+
+  /****** Begin Cell Detection ******/
+
+  grad_x = gradient_x(image_chopped);
+  grad_y = gradient_y(image_chopped);
+
+  gicov = ellipsematching(grad_x, grad_y);
+  max_gicov = gicov*gicov;
+
+  strel =  structuring_element(12); 
+  img_dilated = dilate_f(max_gicov, strel);
+
+  print(img_dilated[0,0]);
+
+/*
+  for( i = 0; i < shape(img_dilated)[0]; i++) {
+    for( j = 0; j < shape(img_dilated)[1]; j++) {
+      printf("%f\n", img_dilated[i,j]);
+    }
+  }
+*/
+  /****** End Cell Detection (result checked for img_dilated) ******/
+
+  /* Find possible matches for cell centers based on GICOV 
+   * and record the rows/columns in which they are found */
+/*
+  pair_counter = 0;
+  len = shape(max_gicov)[0]*shape(mac_gicov)[1];
+  crow = genarray([len], 0);
+  ccol = genarray([len], 0);
+  for (i = 0; i < shape(max_gicov)[0]; i++) {
+    for (j = 0; j < shape(max_gicov)[1]; j++) {
+      if (!(max_gicov[i,j] == 0.0) && (img_dilated[i,j] == max_gicov[i,j])) {
+	crow[pair_counter] = i;
+	ccol[pair_counter] = j;
+	pair_counter++;
+      }
+    }
+  }
+
+  GICOV_spots = with {
+                  ([0] <= iv=[i] < [pair_counter]):gicov[crow[i],ccol[i]];
+                }:genarray([pair_counter]);
+
+  G = genarray([pair_counter], 0.0);
+  x_result = genarray([pair_counter], 0.0);
+  y_result = genarray([pair_counter], 0.0);
+ 
+  x_result_len = 0;
+  for (i = 0; i < pair_counter; i++) {
+    if ((crow[i] > 29) && (crow[i] < BOTTOM - TOP + 39)) {
+      x_result[x_result_len] = ccol[i];
+      y_result[x_result_len] = crow[i] - 40;
+      G[x_result_len] = GICOV_spots[i];
+      x_result_len++;
+    }
+  }
+
+  t = with {
+        ([0] <= iv=[i] < [36]):tod(i)*2.0*PI/36.0;
+      }:genarray([36]);
+
+  cellx = with {
+            ([0,0] < iv=[i,j] < [x_result_len, 36]) {
+              res = x_result[i] + radius * cos(t[j]);
+            }:res;
+          }:genarray([x_result_len, 36]);
+
+  celly = with {
+            ([0,0] < iv=[i,j] < [x_result_len, 36]) {
+              res = y_result[i] + radius * sin(t[j]);
+            }:res;
+          }:genarray([x_result_len, 36]);
+
+  A = TMatrix(9,4); 
+*/
+
+
+  err, cell_file = fopen("../input/sac_cells.dat", "r");
+  /* Note here we hardcoded the number of cells and
+   * read their position from file. 
+   * This is because currently we have difficulties
+   * in translating the TMatrix function in the 
+   * rodinia implementation into SAC */
+  k_count = 88;
+  QAX_CENTERS = FibreScanDoubleArray(cell_file); 
+  QAY_CENTERS = FibreScanDoubleArray(cell_file); 
+
+  num_frames = 10;
+  num_snaxels = 20;
+  ellipsetrack(img_file, QAX_CENTERS, QAY_CENTERS, k_count, radius, num_snaxels, num_frames);
+
+  return( 0);
+}
+
