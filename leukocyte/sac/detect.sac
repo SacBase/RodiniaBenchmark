@@ -75,7 +75,7 @@ double[.,.] chop_flip_image(int[.,.] image, int height, int top, int bottom, int
   return( result);
 }
 
-double[.,.] get_frame(bool cropped, bool scaled, File img_file) 
+double[.,.] get_frame(bool cropped, bool scaled, File &img_file) 
 {
   int[.,.] image_buf;
 
@@ -372,7 +372,7 @@ double[.,.] MGVF(double[.,.] I, double vx, double vy)
   /* Initialize the output matrix IMGVF with values from I */
   IMGVF = with {
             ([0,0] <= iv=[i,j] < [m,n]):I[i,j];
-          }:genarray([m.n]);
+          }:genarray([m,n]);
 	
   /* Precompute row and column indices for the
    * neighbor difference computation below */
@@ -457,40 +457,11 @@ double[.,.] MGVF(double[.,.] I, double vx, double vy)
     ULHe = heaviside(ULHe, UL, -vx - vy, epsilon);
     DLHe = heaviside(DLHe, DL,  vy - vx, epsilon);
     
-    /* Update the IMGVF matrix */
-    for (i = 0; i < m; i++) {
-      for (j = 0; j < n; j++) {
-	/* Store the old value so we can compute the difference later */
-	old_val = m_get_val(IMGVF, i, j);
-	
-	/* Compute IMGVF += (mu / lambda)(UHe .*U  + DHe .*D  + LHe .*L  + RHe .*R +
-	 *                                URHe.*UR + DRHe.*DR + ULHe.*UL + DLHe.*DL);
-         */
-	vU  = m_get_val(UHe,  i, j) * m_get_val(U,  i, j);
-	vD  = m_get_val(DHe,  i, j) * m_get_val(D,  i, j);
-	vL  = m_get_val(LHe,  i, j) * m_get_val(L,  i, j);
-	vR  = m_get_val(RHe,  i, j) * m_get_val(R,  i, j);
-	vUR = m_get_val(URHe, i, j) * m_get_val(UR, i, j);
-	vDR = m_get_val(DRHe, i, j) * m_get_val(DR, i, j);
-	vUL = m_get_val(ULHe, i, j) * m_get_val(UL, i, j);
-	vDL = m_get_val(DLHe, i, j) * m_get_val(DL, i, j);				
-	vHe = old_val + mu_over_lambda * (vU + vD + vL + vR + vUR + vDR + vUL + vDL);
-	
-	/* Compute IMGVF -= (1 / lambda)(I .* (IMGVF - I)) */
-	vI = m_get_val(I, i, j);
-	new_val = vHe - (one_over_lambda * vI * (vHe - vI));
-	m_set_val(IMGVF, i, j, new_val);
-	
-	/* Keep track of the absolute value of the differences
-	 * between this iteration and the previous one */
-	total_diff += fabs(new_val - old_val);
-      }
-    }
-  
     IMGVF_old = IMGVF;
 
     IMGVF = with {
               ([0,0] <= iv=[i,j] < [m,n]) {
+	        old_val = IMGVF[i, j];
 		/* Compute IMGVF += (mu / lambda)(UHe .*U  + DHe .*D  + LHe .*L  + RHe .*R +
 		 *                                URHe.*UR + DRHe.*DR + ULHe.*UL + DLHe.*DL);
 		 */
@@ -507,7 +478,7 @@ double[.,.] MGVF(double[.,.] I, double vx, double vy)
 		/* Compute IMGVF -= (1 / lambda)(I .* (IMGVF - I)) */
 		vI = I[i, j];
 		new_val = vHe - (one_over_lambda * vI * (vHe - vI));
-              }:new_val;;
+              }:new_val;
             }:modarray(IMGVF);
 
     total_diff = sum(fabs(IMGVF-IMGVF_old));
@@ -522,7 +493,187 @@ double[.,.] MGVF(double[.,.] I, double vx, double vy)
   return( IMGVF);
 }
 
-void ellipsetrack(File img_file, double[.] xc0, double[.] yc0, int Nc, int R, int Np, int Nf) 
+/* Performs bilinear interpolation, getting the values of m specified in the vectors X and Y */
+double[.,.] linear_interp2(double[.,.] m, double[.] X, double[.] Y)
+{
+  /* Kind of assumes X and Y have same len! */
+
+  retval = with {
+             ([0,0] <= iv=[k,i] < [1,shape(X)[0]] ) {
+               x_coord = X[i]; 
+               y_coord = Y[i]; 
+
+               l = toi(x_coord);
+               k = toi(y_coord);
+
+               a = x_coord - tod(l);
+               b = y_coord - tod(k);
+	      
+               new_val = (1.0-a)*(1.0-b)*m[k, l] +
+	                 a*(1.0-b)*m[k, l+1] +
+		         (1.0-a)*b*m[k+1, l] +
+		         a*b*m[k+1, l+1];    
+             }:new_val;
+           }:genarray([1,shape(X)[0]]);
+
+  return( retval);
+}
+
+double, double, double[.] ellipseevolve(double[.,.] f, double xc0, double yc0, double[.] r0, double[.] t, int Np, double Er, double Ey) 
+{
+  /*
+  % ELLIPSEEVOLVE evolves a parametric snake according
+  %  to some energy constraints.
+  %
+  % INPUTS:
+  %   f............potential surface
+  %   xc0,yc0......initial center position
+  %   r0,t.........initial radii & angle vectors (with Np elements each)
+  %   Np...........number of snaxel points per snake
+  %   Er...........expected radius
+  %   Ey...........expected y position
+  %
+  % OUTPUTS
+  %   xc0,yc0.......final center position
+  %   r0...........final radii
+  */
+	
+	
+  /* Constants */
+  deltax = 0.2;
+  deltay = 0.2;
+  deltar = 0.2; 
+  converge = 0.1;
+  lambdaedge = 1.0;
+  lambdasize = 0.2;
+  lambdapath = 0.05;
+  iterations = 1000;      /* maximum number of iterations */
+
+  /* Initialize variables */
+  xc = xc0;
+  yc = yc0;
+  r = with {
+        ([0] <= iv=[i] < [Np]):r0[i];
+      }:genarray([Np]);
+ 
+  /* Compute the x- and y-gradients of the MGVF matrix */
+  fx = gradient_x(f);
+  fy = gradient_y(f);
+  
+  /* Normalize the gradients */
+  fh = shape(f)[0];
+  fw = shape(f)[1];
+
+  fx, fy = with {
+             ([0,0] <= iv=[i,j] < [fh,fw]) {
+               temp_x = fx[i,j];
+               temp_y = fy[i,j];
+               fmag = sqrt(temp_x*temp_x+temp_y*temp_y);
+               fx_res = temp_x/fmag;
+               fy_res = temp_y/fmag;
+             }:(fx_res,fy_res);
+           }:(modarray(fx),
+              modarray(fy));
+	
+  r_old = genarray([Np], 0.0);
+  x = genarray([Np], 0.0);
+  y = genarray([Np], 0.0);
+
+  /* Evolve the snake */
+  iter = 0;
+  snakediff = 1.0;
+  while (iter < iterations && snakediff > converge) {
+	  
+    /* Save the values from the previous iteration */
+    xc_old = xc;
+    yc_old = yc;
+    r_old = with {
+              ([0] <= iv=[i] < [Np]):r[i];
+            }:modarray(r_old);
+    
+    /* Compute the locations of the snaxels */
+    x = with {
+          ([0] <= iv=[i] < [Np]):xc+r[i]*cos(t[i]);
+        }:modarray(x);
+    y = with {
+          ([0] <= iv=[i] < [Np]):yc+r[i]*sin(t[i]);
+        }:modarray(y);
+
+    /* See if any of the points in the snake are off the edge of the image */
+    min_x = minval(x);
+    max_x = maxval(x);
+    min_y = minval(y);
+    max_y = maxval(y);
+    if (min_x < 0.0 || max_x > tod(fw) - 1.0 || min_y < 0.0 || max_y > tod(fh) - 1.0) {
+      iter = iterations; /* Early exit */
+    }
+    else {    
+      /* Compute the length of the snake*/	
+      L = with {
+	    ([0] <= iv=[i] < [Np-1]) {
+	      diff_x = x[i+1]-x[i];
+	      diff_y = y[i+1]-y[i];
+	      res = sqrt(diff_x*diff_x+diff_y*diff_y);
+	    }:res;
+	  }:fold(+,0.0);
+       
+      diff_x = x[0]-x[Np-1];
+      diff_y = y[0]-y[Np-1];
+      L += sqrt(diff_x*diff_x+diff_y*diff_y);
+   
+      /* Compute the potential surface at each snaxel */
+      vf  = linear_interp2(f,  x, y);
+      vfx = linear_interp2(fx, x, y);
+      vfy = linear_interp2(fy, x, y);
+      
+      /* Compute the average potential surface around the snake */
+      vfmean  = sum(vf ) / L;
+      vfxmean = sum(vfx) / L;
+      vfymean = sum(vfy) / L;
+    
+      /* Compute the radial potential surface */		
+      m = shape(vf)[0];
+      n = shape(vf)[1];
+      vfr = with {
+	      ([0,0] <= iv=[k,i] < [m,n]) {
+		vf_val  = vf [0, i];
+		vfx_val = vfx[0, i];
+		vfy_val = vfy[0, i];
+		x_val = x[i];
+		y_val = y[i];
+		new_val = (vf_val + vfx_val * (x_val - xc) + vfy_val * (y_val - yc) - vfmean) / L;      
+	      }:new_val;
+	    }:genarray([m,n]);  
+   
+      /* Update the snake center and snaxels */
+      xc =  xc + (deltax * lambdaedge * vfxmean);
+      yc = (yc + (deltay * lambdaedge * vfymean) + (deltay * lambdapath * Ey)) / (1.0 + deltay * lambdapath);
+
+      r = with {
+	    ([0] <= iv=[i] < [Np]) {
+	      res = (r[i] + (deltar * lambdaedge * vfr[0, i]) + (deltar * lambdasize * Er)) /
+		    (1.0 + deltar * lambdasize);
+	    }:res;
+	  }:modarray(r);
+
+      r_diff = sum( fabs( r - r_old));
+   
+      /* Test for convergence */
+      snakediff = fabs(xc - xc_old) + fabs(yc - yc_old) + r_diff;
+      
+      iter++;
+    }
+  }
+	
+  /* Set the return values */
+  r0 = with {
+        ([0] <= iv=[i] < [Np]):r[i];
+       }:modarray(r0);
+
+  return( xc, yc, r0);
+}
+
+void ellipsetrack(File &img_file, double[.] xc0, double[.] yc0, int Nc, int R, int Np, int Nf) 
 {
   /*
   % ELLIPSETRACK tracks cells in the movie specified by 'video', at
@@ -566,7 +717,6 @@ void ellipsetrack(File img_file, double[.] xc0, double[.] yc0, int Nc, int R, in
       }:genarray([Nc,Np,Nf1],0.0);
 
   /* Process each frame */
-  cell_num;
   for (frame_num = 1; frame_num <= Nf; frame_num++) {	 
     printf("\rProcessing frame %d / %d", frame_num, Nf);
     
@@ -622,11 +772,11 @@ void ellipsetrack(File img_file, double[.] xc0, double[.] yc0, int Nc, int R, in
       Ix = gradient_x(Isub);
       Iy = gradient_y(Isub);
       IE = with {
-             ([0,0] <= iv[i,j] < shape(Isub)) {
+             ([0,0] <= iv=[i,j] < shape(Isub)) {
                temp_x = Ix[i,j];
                temp_y = Iy[i,j];
                res = sqrt(temp_x*temp_x+temp_y*temp_y);
-             };res;
+             }:res;
            }:genarray(shape(Isub));
       
       /* Compute the motion gradient vector flow (MGVF) edgemaps */
@@ -654,7 +804,7 @@ void ellipsetrack(File img_file, double[.] xc0, double[.] yc0, int Nc, int R, in
       }
       
       /* Output the updated center of each cell */
-      /* printf("%d,%f,%f\n", cell_num, xci[cell_num], yci[cell_num]); */
+      printf("frame:%d,cell:%d,position[%f,%f]\n", frame_num, cell_num, xc[cell_num, frame_num], yc[cell_num, frame_num]);
     }
 		
     /* Output a new line to visually distinguish the output from different frames */
@@ -755,8 +905,10 @@ int main()
   QAX_CENTERS = FibreScanDoubleArray(cell_file); 
   QAY_CENTERS = FibreScanDoubleArray(cell_file); 
 
-  num_frames = 10;
+  num_frames = 1;
   num_snaxels = 20;
+  radius = 10;
+ 
   ellipsetrack(img_file, QAX_CENTERS, QAY_CENTERS, k_count, radius, num_snaxels, num_frames);
 
   return( 0);
