@@ -1,0 +1,24 @@
+use StdIO: all;
+use Array: all;
+
+int main()
+{
+
+  b = genarray([8,8], 0);
+  b[4,5] = 10;
+
+  a = with {
+       ([0,0] <= iv < [8,8]) {
+         b[iv] = iv[0]+iv[1];
+         res = iv[0]*iv[1]+b[iv];
+       }:res;
+      }:genarray([8,8], 0);
+
+  print( b);
+  print( a);
+
+  return( 0);
+}
+
+
+

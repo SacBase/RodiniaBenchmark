@@ -63,6 +63,8 @@ int main()
   /* Input Matrix */
   J = random_matrix();
 
+  c = genarray([ROWS, COLS], TOD(0.0));
+
   for( iter=0; iter< ITER; iter++) {
 
 #ifdef FOLD
@@ -158,7 +160,7 @@ int main()
               res = TOD(1.0);
             }
           }:res;
-        }:genarray([ROWS, COLS], TOD(0.0));
+        }:modarray(c);
 
     J = with { 
           ( [0, 0] <= iv=[i,j] < [ROWS, COLS]) {
@@ -184,11 +186,14 @@ int main()
   }
 
 #ifdef OUTPUT
+/*
   for( i = 0 ; i < ROWS; i++){
     for ( j = 0 ; j < COLS; j++){
        printf("%.5f\n", J[i, j]); 
     }	
   }
+*/
+  print( J);
 #else
   print( J[0,0]);
 #endif

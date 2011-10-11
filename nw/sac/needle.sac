@@ -141,53 +141,23 @@ void runTest( )
                      }:modarray( input_itemsets);
   }
 
-#ifdef OUTPUT 
 /*
-  printf("print traceback value CPU:\n");
-	
-  for (i = max_rows - 2, j = max_rows - 2; i>=0, j>=0;) {
-    if ( i == max_rows - 2 && j == max_rows - 2 ) {
-      printf("%d ", input_itemsets[i, j]); 
-    }
-    if ( i == 0 && j == 0 ) break;
-
-    if ( i > 0 && j > 0 ) {
-      nw = input_itemsets[(i - 1), j - 1];
-      w  = input_itemsets[ i, j - 1];
-      n  = input_itemsets[(i - 1), j];
-    }
-    else if ( i == 0 ) {
-      nw = n = LIMIT;
-      w  = input_itemsets[i, j - 1];
-    }
-    else if ( j == 0 ) {
-      nw = w = LIMIT;
-      n  = input_itemsets[(i - 1), j];
-    }
-    else {
-    }
-
-    traceback = maximum(nw, w, n);
-	    
-    printf("%d ", traceback);
-
-    if(traceback == nw ) {
-      i--; 
-      j--; 
-      continue;
-    }
-    else if(traceback == w ) {
-      j--; 
-      continue;
-    }
-    else if(traceback == n ) {
-      i--; 
-      continue;
-    }
-    else;
+  for( i = 1; i < max_cols-1; i++) {
+    input_itemsets = with {
+                       ( [1+i,1+i] <= iv=[r,c] < [max_rows,max_cols]) {
+                         if( r > max_cols -10 || c < max_rows +20 || c+r < 123 ) { 
+                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c], 
+                                          input_itemsets[r, c-1] - penalty, 
+			                  input_itemsets[r-1, c] - penalty);
+                         }
+                         else {
+                           res = input_itemsets[r,c];
+                         }
+                       }:res;
+                     }:modarray( input_itemsets);
   }
-  printf("\n");
-*/  
+*/
+#ifdef OUTPUT 
   for( i = 0; i < max_rows; i++) {
     for( j = 0; j < max_cols; j++) {
       printf("%d ", input_itemsets[i, j]);

@@ -1,0 +1,1 @@
+./lud_cuda -m -i ../input/512.dat 

@@ -1,0 +1,165 @@
+* srad
+This benchmark has been converted to SAC. The result of the SAC generated 
+code has been compared with the orginal Rodina version and they seem to match
+quite well (however, due to tiny roundoff errors, there is slight difference).
+Also, to make these two version comparable, we also need to manaully change
+the random function "SACrandom" of SAC to the stdlib.h random function "rand"
+The original Rodinia version has also been modified so we now have two new
+kernels which do not utilise the shared memory at all. The prupose of this
+is to compare to the performance of kernel with and without shared memory on
+the new Fermi architecture, which features hardware managed L1/L2 cache. The
+runtime results seem to show that utilising shared memory is *less* efficient. 
+
+* hotspot (HS)
+This benchmark has been converted to SAC (hotspot.sac). The result of the SAC 
+generated code has been compared with the orginal Rodina version and they seem 
+to match quite well (however, due to tiny roundoff errors, there is slight 
+difference). Based on the original Rodinia version (hotspot_cuda_shr_float.cu),  
+we also added a modified version (hotspot_cuda_noshr_float.cu) which is a straight 
+translation from the OpenMP code (hotspot_openmp_float.cpp) without utilising 
+shared memory. The prupose of this is to compare to the performance of kernel 
+with and without shared memory on the new Fermi architecture, which features 
+hardware managed L1/L2 cache. The runtime results seem to show that *utilising* 
+shared memory is *less* efficient. 
+Inputs to the program are in directory input. For CUDA and OpenMP versions,
+the inputs are separated into two files: temp and power. For SAC, both temp
+and power data are stored in one file for easy reading (sac_temp_power*).
+The CUDA and OpenMP executables can be invoked by the commands stored in
+run_shr, run_noshr and run_openmp. Ouputs from these executables are written
+output_shr.out, output_noshr.out and output_openmp.out.
+Currently, we only have float version and double version might be added 
+in the future.  
+
+
+* cfd
+This benchmark has been converted to SAC (euler3d.sac). The result of the SAC 
+generated CUDA code has been compared with the orginal Rodina version and the SAC 
+generated sequential code. The results match for most of the data, however, when
+the result is too small, e.g. 10^(-17), the results from CUDA just shows 0 while
+the result from the other two can still be displayed as some number to the power
+of -17. This could be due to the difference in architectures but it has not
+been investigated further. Currently we only have double versions, they are 
+euler3d.sac, euler3d_cpu_double.cpp and euler3d_gpu_double.cu. Note that to 
+better utilise the GPU off chip memory bandwidth, the major arrays in the program
+has been transformed from row-wise to column-wise. For example, arrays "varaibles" 
+and "fluxes" were orginally of shape [SIZE, NVAR]. In the Rodinia CUDA version,
+they have been changed to shape [NVAR, SIZE]. The same change has also been
+made in the SAC version. In the Rodinia CUDA version, the major kernel "compute_flux"
+is invoked with a 1D thread grid along the X dimension. Each thread essentially
+computes 5 different elements along the same column of array "fluxes"(Y dimension). 
+These five elements are: density, momentum_x, momentum_y, momentum_z and density_engery.
+This organization ensure coalesced off chip memory accesses. However, with WITH-loop
+in SAC, this is difficult to achieve. Because WITH-loop does not allow the inner
+dimension of an array to computed in parallel. So the current implmentation we 
+have is WITH-loop with 5 partions. Essentially, each partition computes on "row"  
+of array "fluxes". However, this is inefficeint: Firsly, we have 5 times more 
+kernel invocation overheads (the Rodinia CUDA version has only one kernel); Secondly,
+because a lot of computation is common for all 5 rows, separating them loses the
+opportunity to reuse data because data in cache is not persistent across different
+kerenl invocations. This is not an easy problem and further discssion is needed 
+with more experienced SAC developers.  
+Finally, apart from transforming the arrays layout, the Rodinia verions utilise 
+constant memory to store small arrays. We have NOT yet written a version WITHOUT
+such constant memory optimzation. However, this should be fairly trivial. 
+Not runtime comparision has been made between any versions of this benchmarks. This
+will be performed later. 
+All input files are in the ./input directory. Files with names fvcorr.domn.* are 
+inputs to the Rodinia CUDA and OpenMP version. Files with names sac_input_* are inputs
+to the SAC versions. Here * represent the size (number of rows) of the input. The
+first line of each input file contains the total number of total lines in the file.
+Note that currently, the input size is hardcoded in the program by a #define macro.
+This means that if we want to use a different input file with different size, we
+need to change the #define macro as well. The reason we do this is to ensure all
+arrays in the SAC program is AKS.  
+
+* NW
+There are three versions of this benchmark: needle.cu, needle.cpp and needle.sac.
+They are the orginal Rodinia CUDA and OpenMP versions and the converted SAC version.
+It seems that the orginal OpenMP version downloaded is slightly incorrect when 
+computing the upper left coner and lower right coner, i.e. they do not conver all
+elements. So this has been fixed and the results now match the results of the 
+original unchanged Rodinia CUDA version. The orginal CUDA version has also been
+augmented with two new kernels (computing upper left coner and lower right coner) 
+without using shared memory (to use these two kernels, define the PLAIN macro).
+Initial runtime result shows that the shared version is slghtly better. Because 
+of this, the CUDA backend of our SAC compiler should also consider using shared
+memory if possible (however, it is not using it yet). The SAC implementation of
+NW is a bit ugly due to the difficulty of expressing diagonal parallelism in SAC.
+In the current implementation, we use one WITH-loop for each upper left coner and
+lower right coner computation (See the two for loops in the program). Within the
+each WITH-loop, each iteration determines if it is the one on the diagonal. If it
+is, the performs the maxumum computation (See the if branch). Otherwise, it just 
+selects the corresponding element without any modifications (See the else branch).    
+Perforamnce of the SAC generated CUDA code has not been compared with the original
+Rodinia CUDA code. However, based on the SAC implementation, the SAC gerneted code
+will definitely be much slower than the Rodinia version. This is not because of 
+the utilization of shared memory, but because in SAC implementation, we lanuch 
+5 kernels for each diagnal strip (due to the way WITH-loop are transformed within
+the compiler). So the runtime will not be very good.
+Another thing to note is that the random function used in the benchmarks. The
+SAC random function generates minus value. So when used these mius value to index
+another array, erroueous reuslt will occur. So currently, to compare the result
+with orginal Rodinia benchmarks (CUDA or OpenMP), for the SAC generated code 
+(Sequential or CUDA), we need to manually change the SACrandom functions to rand().
+After that, all versions produce the same results.  
+
+* K-means
+There are three versions of this benchmark, they are in three separate directories:
+openmp, cuda and sac. The program structure of the SAC version is very similar to the
+OpenMP version. In the main computation loop, the for loop to compute new membership
+is converted to WITH-loop. So it will be transformed into CUDA kernels by the compiler.
+The following two for loops, which compute delta reduction and new cluster reduction,
+is left as normal for loops and so they will not be converted into CUDA kernels. The
+SAC generated code is essentially equivalent to the Rodinia CUDA version WITHOUT the
+following macros defined: BLOCK_DELTA_REDUCE(kmenas_cuda.cu), BLOCK_CENTER_REDUCE
+(kmeans_cuda.cu), GPU_DELTA_REDUCTION(kmeans_cuda_kernel.cu) and GPU_NEW_CENTER_REDUCTION
+(kmeans_cuda_kernel.cu). Note that the two *DELTA* macros are used to perform delta
+reduction on GPU and the two *CLUSTER* macros are used to perform new cluster reduction
+on GPU. Initial experimental results show that performing delta reduction on GPU does
+not provide too much performance benefits while performing cluster reduction on GPU
+does improve the performance a lot. There are several issues with the SAC implementation:
+1) We are not able to perform parallel reduction of any kind. So both delta and cluster
+reductions need to be left as they are, i.e. performed on host by for loops. 2) One main
+array are not able to be lifted out of the outmost while loop, i.e. the 2D feature array.
+This is because it is accessed in the WITH-loop computing the new membership array. And 
+it is later used in the for loop for delta reduction. So the current optimization thinks
+that it is accessed on the GPU and host in the same loop and therefore it can not be lifted
+out. However, in this case, it can actually be lifted out because it is read on in both
+the WITH-loop and the for loop, and neither of them change the values in feature array. 
+So the current optimisation needs to be modified to cater for this case.   
+
+* bfs
+This benchmark has not been converted to SAC yet. It is a bit difficult because: to 
+parallelise the parallel for loop, i.e. the one with OpenMP pragma, we need to convert
+it into a WITH-loop. However, the two output arrays of this for loop, i.e. cost and
+updating_graph_mask, can not be computed on a one-to-one mapping specified by the 
+WITH-loop. This is because, during each iteration of the outermost for loop, a parent
+essentilly traverse each of each sons and update the corresponding element in the cost
+and updating_graph_mask arrays. However, the sons can be anywhere within the two arrays
+and such position does not need to corresponding to the parent's position. Also, in 
+this case, each parent essentially produce more than one element, which does not match
+the sematics of a WITH-loop, which specifies that each iteration only produces one and
+only one element. So we postpone this bencahmark and it needs further consideration.
+
+* lud
+This benchmark has been converted into SAC. The SAC implementation is basicaly a direct
+translation of the OpenMP implmentation, i.e. OpenMP parallel for loops have been converted
+into WITH-lo ps. The Rodinia implementation uses a blocked version and breaks the 
+computation into thress kernels. During each iteration of the blocked for loop, one kernel
+computes one diagonal block, then a second kernel computes both the row and column 
+perimeters (also in blocks) orginating from the just-computed disgonal block. Finally, 
+a third kernel computes all internal blocks. This computation pattern preserves the data
+dependencies while accumulates result over time. Also each kernel employs shared memory
+to optimized data reuse. For the purpose of comparision, each kernel is also provided 
+with a version without shared memory. Initial runtime result shows that the non-shared 
+memory version is almost twice slower than the shared memory version. One critical 
+hand optimization emploied by this benchmark is the blocked outermost for loop. However,
+this is very difficult to specified in SAC at the moment. The result of that is the SAC
+generated code executes at least 16 times more kernels than the Rodinia CUDA version 
+(the blocking factor). Moreover, each WITH-loop has several partition (even thought most
+of them just copy data from one array to another array), each partition is generated as
+a kernel, the total number of kernels is even larger. The result of such inefficiency 
+is that the SAC generated CUDA version is almost 30 times slower than the Rodinia shared
+memory CUDA version.  
+
+

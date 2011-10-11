@@ -1,0 +1,42 @@
+use StdIO: all;
+use Array: all;
+
+int main()
+{
+  a = with {
+        ([0,0] <= iv=[i,j] < [20,20]):i*4+j;
+      }:genarray([4,4], 0);
+
+  a[2,2] = 9;
+/*
+  b = with {
+        ([0,0] <= iv=[r,c] < [4,4]) {
+          if( r < 2 && c > 1 && (r+c) == 7) {
+            res = a[iv] + 1;
+          } 
+          else if( r == 2 || c==1)
+          {
+            res = a[iv] * 2;
+          }
+          else
+          {
+            res = a[iv];
+          }
+        }:res;
+      }:genarray([4,4]);
+*/
+
+   b = with {
+        ([0,0] <= iv=[r,c] < [20,10]) {
+          res = a[iv]; 
+        }:res;
+        ([0,10] <= iv=[r,c] < [20,20]) {
+          res = a[iv]+1; 
+        }:res;
+      }:modarray(a); 
+
+  print(b);
+
+  return( 0);
+}
+

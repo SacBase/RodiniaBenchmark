@@ -1,7 +1,8 @@
 use StdIO: all;
 use Array: all;
+/* use Benchmarking: all; */
 
-#ifdef DOUBLE
+#ifdef DOUBLE 
 #define DBL double
 #define TOD tod
 #else 
@@ -10,7 +11,7 @@ use Array: all;
 #endif
 
 #ifndef SIZE
-#define SIZE 512
+#define SIZE 2048
 #endif
 
 int main()
@@ -19,8 +20,9 @@ int main()
 
   mat = FibreScanFloatArray();
 
-  for( i = 0; i < SIZE; i++) {
 #ifdef C_IMP /* C implementation */
+
+  for( i = 0; i < SIZE; i++) {
     for (j = i; j < SIZE; j++) {
       summ = mat[i, j];
       for (k = 0; k < i; k++) { 
@@ -36,7 +38,11 @@ int main()
       }
       mat[j, i] = summ/mat[i, i];
     }
-#else /* SAC implementation */
+  }
+
+#elif SAC1 /* SAC implementation 1 */
+
+  for( i = 0; i < SIZE; i++) {
     mat = with {
             ([i,i] <= iv=[m,j] < [i+1,SIZE]) {
               res = with {
@@ -57,13 +63,41 @@ int main()
               res = res/mat[i,i];
             }:res;
           }:modarray(mat);
-#endif
   }
+#else /* SAC implementation 2 */
+/*
+  interval0 = getInterval( "LUD", 0 );
+  start( interval0 );
+*/
+
+  for( i = 0; i < SIZE-1; i++) {
+
+    /* Compute column */
+    mat = with {
+            ([i+1,i] <= iv=[j,n] < [SIZE,i+1]) {
+              res = mat[iv]/mat[i,i];
+            }:res;
+          }:modarray(mat);
+
+    mat = with {
+            ([i+1,i+1] <= iv=[m,j] < [SIZE,SIZE]) {
+              res = mat[iv] - mat[m,i]*mat[i,j];  
+            }:res;
+          }:modarray(mat);
+  }
+
+/*
+  end( interval0 );
+  printResult( interval0 );
+  destroyInterval( interval0 );
+*/
+
+#endif
 
 #ifdef OUTPUT
   for( i = 0; i < SIZE; i++) {
     for( j = 0; j < SIZE; j++) {
-      printf("[%d %d]:%f\n", i, j, mat[i, j]);
+      printf("%f ", mat[i, j]);
     }
     printf("\n");
   }

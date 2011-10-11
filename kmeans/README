@@ -1,14 +1,14 @@
 
 * K-Means
 There are four different versions of this benchmark in the following directories: serial, openmp, cuda and sac (the 
-serial fold just contains a sequential implementation of the openmp version). Note that, unlike other benchmarks, 
+serial folder just contains a sequential implementation of the openmp version). Note that, unlike other benchmarks, 
 there is a separate folder containing a sequential implementaion and not an OPEN macro defined in the openmp version. 
 This is because the openmp uses a partial array to do the partial folding and this is not required in the sequential 
 implementaion.  
 
 The Rodinia CUDA version can have different implmentations based on the following four macros: BLOCK_DELTA_REDUCE 
-(kmenas_cuda.cu), BLOCK_CENTER_REDUCE (kmeans_cuda.cu), GPU_DELTA_REDUCTION (kmeans_cuda_kernel.cu) and 
-GPU_NEW_CENTER_REDUCTION (kmeans_cuda_kernel.cu). The first two macros are used to ensure that delta reduction is 
+(in kmenas_cuda.cu), BLOCK_CENTER_REDUCE (in kmeans_cuda.cu), GPU_DELTA_REDUCTION (in kmeans_cuda_kernel.cu) and 
+GPU_NEW_CENTER_REDUCTION (in kmeans_cuda_kernel.cu). The first two macros are used to ensure that delta reduction is 
 performed on GPU and the last two macros are used to ensure new cluster reduction is performed on GPU. Experimental 
 results show that performing delta reduction on GPU does not provide any benefits (it can even degrade the performance) 
 while performing new cluster reduction on GPU improves performance significantly. The Rodinia GPU uses two different 

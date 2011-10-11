@@ -37,7 +37,6 @@ use Array: all;
  * advances the solution of the discretized difference equations 
  * by one time step
  */
-
 inline
 DBL[SIZE,SIZE] single_iteration( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power,
                                  DBL amb_temp, DBL Rx_1, DBL Ry_1, DBL Rz_1, DBL step_div_Cap)
@@ -153,14 +152,18 @@ int main()
 
   temp = FibreScanFloatArray();
   power = FibreScanFloatArray();
-
+  
   temp = compute_tran_temp(temp, power);
 
 #ifdef OUTPUT
+
   for (i=0; i < SIZE; i++) 
     for (j=0; j < SIZE; j++) {
-      printf("%f\n", temp[i, j]);
+      printf("[%d %d]=%f\n", i, j, temp[i, j]);
   }
+/*
+  print( temp);
+*/
 #else
   print(temp[0,0]);
 #endif

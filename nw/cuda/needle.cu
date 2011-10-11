@@ -362,6 +362,9 @@ void runTest( int argc, char** argv)
   dim3 dimBlock(BLOCK_SIZE, 1);
   int block_width = ( max_cols - 1 )/BLOCK_SIZE;
 
+  struct timeval tv1, tv2;
+  gettimeofday( &tv1, NULL);
+
 #ifdef NOSHR  /* No shared memory optimization */
   printf("Processing top-left matrix\n");
   //process top-left matrix
@@ -397,6 +400,10 @@ void runTest( int argc, char** argv)
     needle_cuda_shared_2<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda, max_cols, penalty, i, block_width); 
   }
 #endif
+
+  gettimeofday( &tv2, NULL);
+  double runtime = ((tv2.tv_sec + tv2.tv_usec/1000000.0)-(tv1.tv_sec + tv1.tv_usec/1000000.0));
+  printf("Runtime(seconds): %f\n", runtime);
 
   cudaMemcpy(output_itemsets, matrix_cuda, sizeof(int) * size, cudaMemcpyDeviceToHost);
 	

@@ -1,0 +1,1 @@
+sac2c -DCUDA -t cuda -DLOOP -DFLOAT -doexpar -dopfd -O3 -d cccall backprop.sac -o cuda_out

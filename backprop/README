@@ -25,7 +25,7 @@ the thread block is 16x16 and the length of the X dimension of a 2D array is 17 
 is actually the case in this benchmark). The means that the CUDA grid will contains two 
 blocks in the X dimension even though the only the first column of threads of the second
 block will participate in actual computation. However, since the first column of the 2D
-array is completely redundant and can be ignore, than we are left with 16 elements and
+array is completely redundant and can be ignore, then we are left with 16 elements and
 only one block along the X dimension is needed. This reduces the number of instructions
 executed significantly. The Rodinia CUDA implementation applies a trick to work on only
 the inner elements without touching the top and left border elements. This is essentially
@@ -38,7 +38,7 @@ boundary of the X dimension of the 2D array which is only 16). With 16x16 blocks
 
 POTENTIAL IMPROVEMENT:
 The above observation suggests an improvement to the currently CUDA backend of the SAC 
-compiler: then the withloop bounds are known, such as in the case, it might be beneficial 
+compiler: when the withloop bounds are known, such as in the case, it might be beneficial 
 to generated thread block shape according to the bounds instead of using a fixed shape 
 across all kernels (which is what the current implementation does, and very unfortunately, 
 it uses 16x32 blocks. :p). 
