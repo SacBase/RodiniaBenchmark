@@ -1,10 +1,16 @@
 use StdIO: all;
 use Array: all;
-use Random: all;
+use Rand: all except{srandom};
+use Random: {srandom};
 
 #define LIMIT -999
-#define ROWS       4096 
-#define COLS       4096
+
+#ifndef SIZE
+#define SIZE 64
+#endif
+
+#define ROWS       SIZE
+#define COLS       SIZE
 #define PENALTY    10
 
 inline int maximum( int a, int b, int c)
@@ -29,7 +35,7 @@ int id( int x)
   return( x);
 }
 
-void runTest( ) 
+int runTest( ) 
 {
   max_rows = ROWS;
   max_cols = COLS;
@@ -79,10 +85,12 @@ void runTest( )
 */
   input_itemsets = with {
                      ( [1, 0] <= iv < [ max_rows, 1]) {
-                       res = random(0, 2147483647 )% 10 + 1;
+                       /* res = random(0, 2147483647 )% 10 + 1; */
+                       res = rand()% 10 + 1; 
                      }:res;
                      ( [0, 1] <= iv < [ 1, max_cols]) {
-                       res = random(0, 2147483647 )% 10 + 1;
+                       /* res = random(0, 2147483647 )% 10 + 1; */
+                       res = rand()% 10 + 1; 
                      }:res;
                    }:genarray([max_rows, max_cols], 0);
 
@@ -126,6 +134,7 @@ void runTest( )
                      }:modarray( input_itemsets);
   }
 
+
   for( i = 1; i < max_cols-1; i++) {
     input_itemsets = with {
                        ( [1+i,1+i] <= iv=[r,c] < [max_rows,max_cols]) {
@@ -140,6 +149,7 @@ void runTest( )
                        }:res;
                      }:modarray( input_itemsets);
   }
+
 
 /*
   for( i = 1; i < max_cols-1; i++) {
@@ -158,23 +168,27 @@ void runTest( )
   }
 */
 #ifdef OUTPUT 
+/*
   for( i = 0; i < max_rows; i++) {
     for( j = 0; j < max_cols; j++) {
       printf("%d ", input_itemsets[i, j]);
     }
     printf("\n");
   }
+*/
+  return( input_itemsets[0,0]);
 #else
-  printf("%d\n", input_itemsets[0,0]);
+  /* printf("%d\n", input_itemsets[0,0]); */
+  return( input_itemsets[0,0]);
 #endif
 
 }
 
 int main( ) 
 {
-  runTest( );
+  res = runTest( );
 
-  return( 0);
+  return( res);
 }
 
 
