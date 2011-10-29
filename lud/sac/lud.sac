@@ -95,16 +95,20 @@ int main()
 #endif
 
 #ifdef OUTPUT
+/*
   for( i = 0; i < SIZE; i++) {
     for( j = 0; j < SIZE; j++) {
       printf("%f ", mat[i, j]);
     }
     printf("\n");
   }
+*/
 #else
+/*
   printf("[0 0]:%f\n", mat[0,0]);
+*/
 #endif
 
-  return( 0);
+  return( toi(mat[0,0]));
 }
 
