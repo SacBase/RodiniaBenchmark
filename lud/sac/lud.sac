@@ -1,5 +1,6 @@
 use StdIO: all;
 use Array: all;
+use CommandLine: all;
 /* use Benchmarking: all; */
 
 #ifdef DOUBLE 
@@ -17,8 +18,12 @@ use Array: all;
 int main()
 {
   DBL[SIZE,SIZE] mat;
-
+/*
   mat = FibreScanFloatArray();
+*/
+  filename = argv(1);
+  err, fd = fopen( filename, "r");
+  mat = FibreScanFloatArray( fd);
 
 #ifdef C_IMP /* C implementation */
 
