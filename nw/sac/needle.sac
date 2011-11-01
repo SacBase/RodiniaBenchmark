@@ -112,10 +112,10 @@ int runTest( )
 
   input_itemsets = with {
                      ( [1, 0] <= iv=[i,j] < [ max_rows, 1]) {
-                       res = -i * penalty;
+                       res = id(-i) * penalty;
                      }:res;
                      ( [0, 1] <= iv=[i,j] < [ 1, max_cols]) {
-                       res = -j * penalty; 
+                       res = id(-j) * penalty; 
                      }:res;
                    }:genarray([max_rows, max_cols], 0);
 
