@@ -5,15 +5,14 @@ import datetime;
 import os;
 import random;
 
+sizes = [1024, 2048, 3072, 4096]; 
+#sizes = [128, 256, 512]; 
 
-
-#sizes = [1024, 2048, 3072, 4096]; 
-sizes = [128, 256, 512]; 
 max_measure_regions = 10;
 actual_measure_regions = 0;
 
 # Total number of runs for each compilation
-runs = 4;
+runs = 3;
 
 # Variables for various file names
 out_exe = "a.out"
