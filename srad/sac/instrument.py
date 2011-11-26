@@ -5,36 +5,24 @@ import datetime;
 import os;
 import random;
 
+
+
 #sizes = [1024, 2048, 3072, 4096]; 
-sizes = [128, 256]; 
+sizes = [128, 256, 512]; 
 max_measure_regions = 10;
 actual_measure_regions = 0;
 
 # Total number of runs for each compilation
-runs = 2;
+runs = 4;
 
 # Variables for various file names
-sac_out_exe = "sac_out";
-sac_out_src = "sac_out.c";
-sac_out_sac2c = "./sac_out.sac2c";
-
-cuda_out_exe = "cuda_out";
-cuda_out_src = "cuda_out.cu";
-cuda_out_sac2c = "./cuda_out.sac2c";
+out_exe = "a.out"
+out_sac2c = "./a.out.sac2c";
 
 tmp_file = "tmp";
 all_runtimes = "all_runtimes"
 
-
-# File to store final computed runtime results
-sac_seq       = "./runtimes/sac_seq.csv"
-sac_mt        = "./runtimes/sac_mt.csv"
-cuda_baseline = "./runtimes/cuda_baseline.csv"
-cuda_memopt   = "./runtimes/cuda_memopt.csv"
-cuda_expar    = "./runtimes/cuda_expar.csv"
-cuda_lao      = "./runtimes/cuda_lao.csv"
-cuda_pfd      = "./runtimes/cuda_pfd.csv"
-
+opt_flags = [];
 
 flops_file = "./flops.csv"
 
@@ -43,19 +31,15 @@ try:
     prog         = sys.argv[1];
     flops        = sys.argv[2];
     unit         = sys.argv[3];
-    expar        = sys.argv[4];
-    lao          = sys.argv[5];
-    pfd          = sys.argv[6];
-    iterations   = sys.argv[7];
-    threads      = sys.argv[8];
+    iterations   = sys.argv[4];
+    threads      = sys.argv[5];
+    
+    for arg in sys.argv[6:]:
+       opt_flags.append( arg); 
+
 except: 
-    print "Usage:", sys.argv[0]," [program] [compute flops?] [unit of time (0 - seconds, 1 - milliseconds, 2 - microseconds)] \n [do expar?] [do lao?] [do pfd?] [# of iterations] [# of threads]";
-
+    print "Usage:", sys.argv[0]," [program] [compute flops?] [unit of time (0 - seconds, 1 - milliseconds, 2 - microseconds)] [# of iterations] [# of threads] [OPT flag]*";
     sys.exit(1);
-
-expar  = int(expar); 
-lao    = int(lao); 
-pfd    = int(pfd); 
 
 # Total number of iterations
 iterations = int(iterations);
@@ -86,6 +70,7 @@ def compute_average( src, dst):
     infile = open( src, "r");
     outfile = open( dst, "a");
 
+    print "runs is " + `runs`;
 
     i = 0;
     while i < len(sizes):
@@ -247,25 +232,107 @@ def instrument_time( source=""):
  
     os.system("mv " + tmp_file + " " + source);   
 
+#===========================================================================================================================================
+
+# Instrument the code with papi functions to work out the flops
 if flops:
     i = 0;
     while i < len(sizes):
-	cmd = "sac2c -v0 -O3 -d cccall -DSIZE=" + `sizes[i]` + " -DITER=" + `iterations` + " " +  prog + " -o " + sac_out_exe;
+	cmd = "sac2c -v0 -O3 -d cccall -DSIZE=" + `sizes[i]` + " -DITER=" + `iterations` + " " +  prog + " -o " + out_exe;
 	print cmd;
 	os.system(cmd); 
 
 	#instrument compiler generated code
-	instrument_flops( sac_out_src, sizes[i]);
+	instrument_flops( "a.out.c", sizes[i]);
 
-        add_papi_library( sac_out_sac2c);
+        add_papi_library( out_sac2c);
 
 	#recompile after instrumentation
-	os.system( sac_out_sac2c);
+	os.system( out_sac2c);
 
-        os.system( "./" + sac_out_exe + " >> " + flops_file);
+        os.system( "./" + out_exe + " >> " + flops_file);
 
 	i = i + 1;
 
+#===========================================================================================================================================
+"""
+standard_flags = ["", "-mt -numthreads " + `threads`, "-t cuda -nomemopt", "-t cuda"];
+out_srcs = ["a.out.c", "a.out.c", "a.out.cu", "a.out.cu"];
+runtime_csv = ["./runtimes/sac_seq.csv", "./runtimes/sac_mt.csv", "./runtimes/cuda_baseline.csv", "./runtimes/cuda_memopt.csv"];
+"""
+
+standard_flags = ["", "-t cuda -nomemopt", "-t cuda"];
+out_srcs = ["a.out.c", "a.out.cu", "a.out.cu"];
+runtime_csv = ["./runtimes/sac_seq.csv", "./runtimes/cuda_baseline.csv", "./runtimes/cuda_memopt.csv"];
+
+# Compile and meaures for standard runs, i.e. sac sequential,
+# sac multi-threaded, cuda baseline and cuda with memopt.
+
+r = 0;
+while r < len(standard_flags):
+    i = 0;
+    while i < len(sizes):
+	cmd = "sac2c " + standard_flags[r]  + " -v0 -O3 -d cccall -DSIZE=" + `sizes[i]` + " -DITER=" + `iterations` + " " +  prog + " -o " + out_exe;
+	print cmd;
+	os.system(cmd); 
+
+	#instrument compiler generated code
+	instrument_time( out_srcs[r]);
+
+	#recompile after instrumentation
+	os.system( out_sac2c);
+
+	# Perform several runs and store the runtimes in tmp file 
+	j = 0;
+	while j < runs:
+	    os.system( "./" + out_exe + " >> " + all_runtimes);
+	    j = j + 1;
+
+	i = i + 1;
+
+    compute_average( all_runtimes, runtime_csv[r]);
+    os.system("rm " + all_runtimes);
+
+    r = r + 1;
+
+#===========================================================================================================================================
+
+# Compile and meaures for cuda optimized runs
+
+r = 0
+while r < len(opt_flags):
+    csv = "./runtimes/cuda_" + opt_flags[r] + ".csv";
+    components = opt_flags[r].split('+');
+    flags = "";
+    i = 0;
+    while i < len(components):
+        flags = flags + " -do" + components[i].strip();
+        i = i + 1;    
+
+    i = 0;
+    while i < len(sizes):
+	cmd = "sac2c -t cuda -v0 -O3 " + flags + " -d cccall -DSIZE=" + `sizes[i]` + " -DITER=" + `iterations` + " " +  prog + " -o " + out_exe;
+	print cmd;
+	os.system(cmd); 
+
+	#instrument compiler generated code
+	instrument_time( "a.out.cu");
+
+	#recompile after instrumentation
+	os.system( out_sac2c);
+
+	# Perform several runs and store the runtimes in tmp file 
+	j = 0;
+	while j < runs:
+	    os.system( "./" + out_exe + " >> " + all_runtimes);
+	    j = j + 1;
+
+	i = i + 1;
+
+    compute_average( all_runtimes, csv);
+    os.system("rm " + all_runtimes);
+
+    r = r + 1;
 
 
 """
@@ -293,9 +360,7 @@ while i < len(sizes):
 
 compute_average(all_runtimes, sac_seq);
 os.system("rm " + all_runtimes);
-"""
 
-"""
 #===========================================================================================================================================
 # Collect runtime for sac multi-threaded
 i = 0;
@@ -320,10 +385,7 @@ while i < len(sizes):
 
 compute_average(all_runtimes, sac_mt);
 os.system("rm " + all_runtimes);
-"""
 
-
-"""
 #===========================================================================================================================================
 # Collect runtime for cuda (baseline)
 i = 0;
@@ -374,7 +436,10 @@ while i < len(sizes):
 
 compute_average(all_runtimes, cuda_memopt);
 os.system("rm " + all_runtimes);
+"""
 
+
+"""
 #===========================================================================================================================================
 # Collect runtime for cuda (memopt+expar)
 
@@ -456,4 +521,3 @@ if pfd == 1:
     compute_average(all_runtimes, cuda_pfd);
     os.system("rm " + all_runtimes);
 """
-
