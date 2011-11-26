@@ -5,18 +5,18 @@ use Rand: all except{srandom};
 use Random: {srandom};
 use Benchmarking: all;
 
-#ifdef DOUBLE
-#define DBL double
-#define TOD tod
-#else 
+#ifdef FLOAT
 #define DBL float
 #define TOD tof
+#else 
+#define DBL double
+#define TOD tod
 #endif
 
 #define LAMBDA 0.5
 
 #ifndef ITER
-#define ITER   1000
+#define ITER 500
 #endif
 
 #ifndef SIZE
