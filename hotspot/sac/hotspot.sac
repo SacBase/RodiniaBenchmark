@@ -1,17 +1,20 @@
 use StdIO: all;
 use Array: all;
+use Rand: all except{srandom};
+use Random: {srandom};
+use Benchmarking: all;
 
 /* This is a direct translation of the OpenMP version in
  * Rodinia. Basically, each OpenMP parallel for loop has
  * been converted into a parallel Withloop in SAC.
  */
 
-#ifdef DOUBLE
-#define DBL double
-#define TOD tod
-#else 
+#ifdef FLOAT
 #define DBL float
 #define TOD tof
+#else 
+#define DBL double
+#define TOD tod
 #endif
 
 #ifndef SIZE
@@ -19,7 +22,7 @@ use Array: all;
 #endif
 
 #ifndef ITER
-#define ITER 5000
+#define ITER 20
 #endif
 
 /* maximum power density possible (say 300W for a 10mm x 10mm chip)	*/
@@ -138,10 +141,15 @@ DBL[SIZE,SIZE] compute_tran_temp( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power)
 
     step_div_Cap = sp/Cap;
 
+    interval0 = getInterval( "HOTSPOT", 0 );
+    start( interval0 ); 
+
     for (i = 0; i < ITER ; i++) {
       temp = single_iteration( temp, power, amb_temp, Rx_1, Ry_1, Rz_1, step_div_Cap);
     }
   
+    end( interval0 ); 
+
     return( temp);
 }
 
@@ -150,24 +158,36 @@ int main()
   DBL[SIZE, SIZE] temp; 
   DBL[SIZE, SIZE] power; 
 
+/*
   temp = FibreScanFloatArray();
   power = FibreScanFloatArray();
-  
+*/
+
+  srandom(7);
+
+  /* Generate random input arrays */
+  temp  = genarray([SIZE, SIZE], TOD(0.0));
+  power = genarray([SIZE, SIZE], TOD(0.0));
+
+  for( i = 0 ; i < SIZE ; i++){
+    for ( j = 0 ; j < SIZE ; j++){
+      temp[i,j] = TOD(random(322980566, 343964157))/TOD(1000000.0); 
+    }
+  }
+
+  for( i = 0 ; i < SIZE ; i++){
+    for ( j = 0 ; j < SIZE ; j++){
+      power[i, j] = TOD(random(4, 706))/TOD(1000000.0); 
+    }
+  }  
+ 
   temp = compute_tran_temp(temp, power);
 
 #ifdef OUTPUT
-
-  for (i=0; i < SIZE; i++) 
-    for (j=0; j < SIZE; j++) {
-      printf("[%d %d]=%f\n", i, j, temp[i, j]);
-  }
-/*
   print( temp);
-*/
-#else
-  print(temp[0,0]);
-#endif
-
   return( 0);
+#else
+  return(toi(temp[0,0]));
+#endif
 }
 
