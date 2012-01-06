@@ -37,11 +37,12 @@ sac_no_reuse_nest = "./runtimes/sac_no_reuse_nest.csv"
 cuda_no_reuse_loop = "./runtimes/cuda_no_reuse_loop.csv"
 cuda_no_reuse_kernel = "./runtimes/cuda_no_reuse_kernel.csv"
 sac_reuse = "./runtimes/sac_reuse.csv"
+sac_reuse_rnb = "./runtimes/sac_reuse_rnb.csv"
 cuda_reuse = "./runtimes/cuda_reuse.csv"
 
 
-sizes = [256,512,1024,2048,3072,4096];
-#sizes = [256];
+#sizes = [1024,2048,3072,4096];
+sizes = [256];
 
 def instrument_loop( source="", time_nest=0, nest_count=0):
     _goto = 1;
@@ -159,8 +160,6 @@ def compute_nest_average( size, src, dst):
     infile.close();
     outfile.close();
 
-
-
 i = 0;
 while i < len(sizes):
     cmd = "sac2c -v0 -O3 -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + sac_out_exe;
@@ -168,7 +167,7 @@ while i < len(sizes):
     os.system(cmd); 
 
     #instrument compiler generated code
-    instrument_loop( sac_out_src, 0, num_of_forloop_nests);
+    instrument_loop( sac_out_src, 0, -1);
 
     #recompile after instrumentation
     os.system( sac_out_sac2c);
@@ -214,14 +213,31 @@ while i < len(sizes):
     cmd = "sac2c -v0 -O3 -dopra -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + sac_out_exe;
     print cmd;
     os.system(cmd); 
-    instrument_loop( sac_out_src);
+    instrument_loop( sac_out_src, 0, -1);
     os.system( sac_out_sac2c);
     os.system("rm " + tmp_file);
     j = 0;
     while j < runs:
-        os.system( "./" + sac_out_exe + " < ../input/sac_" + `sizes[i]` + ".csv >> " + tmp_file);
+        os.system( "./" + sac_out_exe + " >> " + tmp_file);
         j = j + 1;
-    compute_average(sizes[i], tmp_file, sac_reuse);
+    compute_loop_average(sizes[i], tmp_file, sac_reuse);
+    i = i + 1;
+"""
+
+"""
+i = 0;
+while i < len(sizes):
+    cmd = "sac2c -v0 -O3 -dopra -dornb -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + sac_out_exe;
+    print cmd;
+    os.system(cmd); 
+    instrument_loop( sac_out_src, 0, -1);
+    os.system( sac_out_sac2c);
+    os.system("rm " + tmp_file);
+    j = 0;
+    while j < runs:
+        os.system( "./" + sac_out_exe + " >> " + tmp_file);
+        j = j + 1;
+    compute_loop_average(sizes[i], tmp_file, sac_reuse_rnb);
     i = i + 1;
 """
 

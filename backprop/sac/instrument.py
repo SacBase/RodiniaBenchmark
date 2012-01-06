@@ -5,8 +5,8 @@ import datetime;
 import os;
 import random;
 
-sizes = [65536, 131072, 262144, 1048576]; 
-#sizes = [65536]; 
+#sizes = [65536, 131072, 262144, 1048576]; 
+sizes = [65536]; 
 
 max_measure_regions = 10;
 actual_measure_regions = 0;

@@ -18,8 +18,8 @@ num_of_kernels = int(num_of_kernels);
 num_of_sizes   = int(num_of_sizes);
 
 analysis_output = "./analysis.out"
-#compute_kernel_names = ["cuknl_1915", "cuknl_1920"];
-compute_kernel_names = ["nest4", "nest9"];
+compute_kernel_names = ["cuknl_1915", "cuknl_1920"];
+#compute_kernel_names = ["nest4", "nest9"];
 
 def name_in_list( name, name_list):
     i = 0;

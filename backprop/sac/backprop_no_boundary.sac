@@ -22,7 +22,7 @@ use Benchmarking: all;
 #endif 
 
 #ifndef SIZE
-#define SIZE   65536 
+#define SIZE   524288 
 #endif
 #define HIDDEN 16
 #define OUT    1
@@ -34,7 +34,7 @@ use Benchmarking: all;
 */
 
 #ifndef ITER
-#define ITER 1000
+#define ITER 500
 #endif
 
 #define RAND_MAX 2147483647

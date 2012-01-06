@@ -20,7 +20,7 @@ nth_while = int(nth_while);
 compute_nest_time = int(compute_nest_time);
 
 num_of_forloop_nests = 0;
-runs = 4;
+runs = 2;
 nest_names = [];  
 
 sac_out_exe = "sac_out";
@@ -40,8 +40,8 @@ sac_reuse = "./runtimes/sac_reuse.csv"
 cuda_reuse = "./runtimes/cuda_reuse.csv"
 
 
-sizes = [256,512,1024,2048,3072,4096];
-#sizes = [256, 512];
+sizes = [1024,2048,3072,4096];
+#sizes = [4096];
 
 def instrument_loop( source="", time_nest=0, nest_count=0):
     _goto = 1;
@@ -75,7 +75,7 @@ def instrument_loop( source="", time_nest=0, nest_count=0):
         elif line.find("while") != -1:
             outfile.write(line);
             if _while == nth_while:
-                if time_nest:
+                if time_nest == 1:
                     i = 0;
                     while i < nest_count:
                         outfile.write("printf(\"%f\\n\", nest_" + `i` + "_time);\n");
@@ -161,12 +161,8 @@ while i < len(sizes):
     print cmd;
     os.system(cmd); 
 
-    if i == 0:
-        num_of_forloop_nests = count_forloop_nests( sac_out_src);
-
     #instrument compiler generated code
-    #instrument_loop( sac_out_src, 1 , num_of_forloop_nests);
-    instrument_loop( sac_out_src, 0, num_of_forloop_nests);
+    instrument_loop( sac_out_src, 0, -1);
 
     #recompile after instrumentation
     os.system( sac_out_sac2c);
@@ -178,11 +174,32 @@ while i < len(sizes):
     while j < runs:
         os.system( "./" + sac_out_exe + " ../input/sac_" + `sizes[i]` + ".dat >> " + tmp_file);
         j = j + 1;
-    #compute_nest_average(sizes[i], tmp_file, sac_no_reuse_nest);
     compute_loop_average(sizes[i], tmp_file, sac_no_reuse_loop);
 
-    i = i + 1;
+    if compute_nest_time == 1:
+	cmd = "sac2c -v0 -O3 -norip -norwo -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + sac_out_exe;
+	print cmd;
+	os.system(cmd); 
 
+	if i == 0:
+	    num_of_forloop_nests = count_forloop_nests( sac_out_src);
+
+	#instrument compiler generated code
+	instrument_loop( sac_out_src, 1 , num_of_forloop_nests);
+
+	#recompile after instrumentation
+	os.system( sac_out_sac2c);
+
+	#cleanup
+	os.system("rm " + tmp_file);
+
+	j = 0;
+	while j < runs:
+	    os.system( "./" + sac_out_exe + " ../input/sac_" + `sizes[i]` + ".dat >> " + tmp_file);
+	    j = j + 1;
+	compute_nest_average(sizes[i], tmp_file, sac_no_reuse_nest);
+      
+    i = i + 1;
 
 """
 i = 0;
@@ -190,14 +207,13 @@ while i < len(sizes):
     cmd = "sac2c -v0 -O3 -dopra -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + sac_out_exe;
     print cmd;
     os.system(cmd); 
-    instrument_loop( sac_out_src);
+    instrument_loop( sac_out_src, 0, -1);
     os.system( sac_out_sac2c);
     os.system("rm " + tmp_file);
     j = 0;
     while j < runs:
-        os.system( "./" + sac_out_exe + " < ../input/sac_" + `sizes[i]` + ".csv >> " + tmp_file);
+        os.system( "./" + sac_out_exe + " ../input/sac_" + `sizes[i]` + ".dat >> " + tmp_file);
         j = j + 1;
-    compute_average(sizes[i], tmp_file, sac_reuse);
+    compute_loop_average(sizes[i], tmp_file, sac_reuse);
     i = i + 1;
 """
-

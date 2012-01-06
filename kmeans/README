@@ -1,54 +1,71 @@
 
 * K-Means
-There are four different versions of this benchmark in the following directories: serial, openmp, cuda and sac (the 
-serial folder just contains a sequential implementation of the openmp version). Note that, unlike other benchmarks, 
-there is a separate folder containing a sequential implementaion and not an OPEN macro defined in the openmp version. 
-This is because the openmp uses a partial array to do the partial folding and this is not required in the sequential 
-implementaion.  
+There are four different versions of this benchmark in the following directories:
+ serial, openmp, cuda and sac (the serial folder just contains a sequential 
+implementation of the openmp version). Note that, unlike other benchmarks, there 
+is a separate folder containing a sequential implementaion and not an OPEN macro 
+defined in the openmp version. This is because the openmp uses a partial array to 
+do the partial folding and this is not required in the sequential implementaion.  
 
-The Rodinia CUDA version can have different implmentations based on the following four macros: BLOCK_DELTA_REDUCE 
-(in kmenas_cuda.cu), BLOCK_CENTER_REDUCE (in kmeans_cuda.cu), GPU_DELTA_REDUCTION (in kmeans_cuda_kernel.cu) and 
-GPU_NEW_CENTER_REDUCTION (in kmeans_cuda_kernel.cu). The first two macros are used to ensure that delta reduction is 
-performed on GPU and the last two macros are used to ensure new cluster reduction is performed on GPU. Experimental 
-results show that performing delta reduction on GPU does not provide any benefits (it can even degrade the performance) 
-while performing new cluster reduction on GPU improves performance significantly. The Rodinia GPU uses two different 
-arrays to store feature: feature_d and feature. feature_d is passed to the GPU kernel kmeansPoint and it is inverted 
-(by kernel invert_mapping) from the original array read in from file. Therefore, feature_d is of shape [nfeatures, npoints]. 
-This shape ensures better array access pattern from the GPU kernel. The other array, feature, is of shape [npoints, nfeatures]
-and this ensures better utilization of the CPU cache when it is accessed in the for loop to accumulate new centers.   
+The Rodinia CUDA version can have different implmentations based on the following 
+four macros: BLOCK_DELTA_REDUCE (in kmenas_cuda.cu), BLOCK_CENTER_REDUCE 
+(in kmeans_cuda.cu), GPU_DELTA_REDUCTION (in kmeans_cuda_kernel.cu) and 
+GPU_NEW_CENTER_REDUCTION (in kmeans_cuda_kernel.cu). The first two macros are used 
+to ensure that delta reduction is performed on GPU and the last two macros are used 
+to ensure new cluster reduction is performed on GPU. Experimental results show that 
+performing delta reduction on GPU does not provide any benefits (it can even degrade 
+the performance) while performing new cluster reduction on GPU improves performance 
+significantly. The Rodinia GPU uses two different arrays to store feature: feature_d 
+and feature. feature_d is passed to the GPU kernel kmeansPoint and it is inverted 
+(by kernel invert_mapping) from the original array read in from file. Therefore, 
+feature_d is of shape [nfeatures, npoints]. This shape ensures better array access 
+pattern from the GPU kernel. The other array, feature, is of shape [npoints, nfeatures]
+and this ensures better utilization of the CPU cache when it is accessed in the for 
+loop to accumulate new centers.   
 
-In the SAC version, the for loop to compute new membership is converted into a withloop. So it will be transformed 
-into CUDA kernel(s) by the compiler. The following two for loop nests, which computes delta and new cluster centers,
-are expressed as normal for loops and will be executed on the host. To ensure that we achieve good access patterns
-to array features on both GPU and CPU, we have two arrays to store features: features_cpu and features_gpu. feature_gpu 
-is read in from file and feature_cpu is just a transposed of it. We uses a normal for loop instead of a withloop to 
-perform the transpose because, for some reason, using a withloop causes the entire withloop to be dragged into its use 
-site, i.e. the place where feature_cpu is referenced. This causes significant performance degrade and should be avoided. 
-The reason for this behavious needs further investigation. 
+In the SAC version, the for loop to compute new membership is converted into a 
+withloop. So it will be transformed into CUDA kernel(s) by the compiler. The 
+following two for loop nests, which computes delta and new cluster centers, are 
+expressed as normal for loops and will be executed on the host. To ensure that 
+we achieve good access patterns to array features on both GPU and CPU, we have two 
+arrays to store features: features_cpu and features_gpu. feature_gpu is read in from 
+file and feature_cpu is just a transposed of it. We uses a normal for loop instead 
+of a withloop to perform the transpose because, for some reason, using a withloop  
+causes the entire withloop to be dragged into its use site, i.e. the place where 
+feature_cpu is referenced. This causes significant performance degrade and should 
+be avoided. The reason for this behavious needs further investigation. 
 
 There are several issues with the SAC implementation:
-1) We do not perform delta reduction on GPU. Althought the latest partial folding optimization should allow us to do that, 
-there will hardly be any performance benefits as the computation is too simple to justify the use a separate kernel for 
-this. In the Rodinia CUDA implmentation, even packing the delta reduction into the same kernel as the membership computation 
-(i.e. define the GPU_DELTA_REDUCTION and BLOCK_DELTA_REDUCE macros), no benefits have been shown. So we decided to leave 
-the delta reduction to the host.  
-2) We find it very difficult to express the new center reduction using SAC withloops. This is because for each point, its 
-features can be reduced into any one of the 5 new centers, depending on its new membership. Such non-one-to-one mapping is 
-very hard to be expressed by withloops in SAC. For this reason, we currently decided to leave the new center reduction to 
-the host. However, this is where we lose performnce compared against the Rodinia CUDA version when GPU center reduction is 
-enabled (i.e. define the GPU_NEW_CENTER_REDUCTION and the BLOCK_CNETER_REDUCE macros). However, the techniques employed by 
-Rodinia CUDA implementaion is so complicated that it is almost impossible for a compiler to achieve. Further investigation 
-is needed on this issue.    
-3) Before we separate features into two arrays features_cpu features_gpu, the single array features can not able to be lifted 
-out of the main do-while loop. This is because it is accessed in the withloop computing the new membership array and later 
-the for loop for new center reduction. So the current mtran optimization thinks that it is accessed on the GPU and host in 
-the same loop and therefore it can not be lifted out. However, in this case, the host2device for features is actually loop 
-invariant and should be lifted out. This lead us adding the loop invariant removal optimization after the CUDA specific 
-transfer minimization optimization. And this solves this issue. However, when we separate features into two arrays: 
-features_cpu and features_gpu, this issue no longer exists. But anyway, this example helps us to uncover a potential bug
+1) We do not perform delta reduction on GPU. Althought the latest partial folding 
+optimization should allow us to do that, there will hardly be any performance benefits 
+as the computation is too simple to justify the use a separate kernel for this. In 
+the Rodinia CUDA implmentation, even packing the delta reduction into the same kernel 
+as the membership computation (i.e. define the GPU_DELTA_REDUCTION and BLOCK_DELTA_REDUCE 
+macros), no benefits have been shown. So we decided to leave the delta reduction to the 
+host.  
+2) We find it very difficult to express the new center reduction using SAC withloops. 
+This is because for each point, its features can be reduced into any one of the 5 new 
+centers, depending on its new membership. Such non-one-to-one mapping is very hard to be 
+expressed by withloops in SAC. For this reason, we currently decided to leave the new 
+center reduction to the host. However, this is where we lose performnce compared against 
+the Rodinia CUDA version when GPU center reduction is enabled (i.e. define the 
+GPU_NEW_CENTER_REDUCTION and the BLOCK_CNETER_REDUCE macros). However, the techniques 
+employed by Rodinia CUDA implementaion is so complicated that it is almost impossible 
+for a compiler to achieve. Further investigation is needed on this issue.    
+3) Before we separate features into two arrays features_cpu features_gpu, the single 
+array features can not able to be lifted out of the main do-while loop. This is because 
+it is accessed in the withloop computing the new membership array and later the for loop 
+for new center reduction. So the current mtran optimization thinks that it is accessed 
+on the GPU and host in the same loop and therefore it can not be lifted out. However, 
+in this case, the host2device for features is actually loop invariant and should be 
+lifted out. This lead us adding the loop invariant removal optimization after the CUDA 
+specific transfer minimization optimization. And this solves this issue. However, when 
+we separate features into two arrays: features_cpu and features_gpu, this issue no 
+longer exists. But anyway, this example helps us to uncover a potential bug
 in the CUDA backend.  
 
-The SAC generated CUDA code is almost three times slower and the Rodinia CUDA code for the reason we discussed eariler, 
-i.e. not able to perform new center reduction on the GPU. The SAC sequential implementation is also slower than the Rodinia 
-sequential implementation. The reason is still not clear and further investigation is needed.  
+The SAC generated CUDA code is almost three times slower and the Rodinia CUDA code for 
+the reason we discussed eariler, i.e. not able to perform new center reduction on the GPU. 
+The SAC sequential implementation is also slower than the Rodinia sequential implementation. 
+The reason is still not clear and further investigation is needed.  
  

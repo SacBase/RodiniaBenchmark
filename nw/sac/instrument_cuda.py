@@ -37,6 +37,7 @@ cuda_no_reuse_loop = "./runtimes/cuda_no_reuse_loop.csv"
 cuda_no_reuse_kernel = "./runtimes/cuda_no_reuse_kernel.csv"
 sac_reuse = "./runtimes/sac_reuse.csv"
 cuda_reuse = "./runtimes/cuda_reuse.csv"
+cuda_reuse_rnb = "./runtimes/cuda_reuse_rnb.csv"
 
 
 sizes = [256,512,1024,2048,3072,4096];
@@ -151,13 +152,12 @@ def compute_kernel_average( size, src, dst):
     infile.close();
     outfile.close();
 
+"""
 i = 0;
 while i < len(sizes):
     cmd = "sac2c -t cuda -v0 -O3 -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
     print cmd;
     os.system(cmd); 
-
-
 
     #instrument compiler generated code
     instrument_loop( cuda_out_src, 0, -1, sizes[i]);
@@ -203,22 +203,21 @@ while i < len(sizes):
     i = i + 1;
 
 kenrel_names = [];
-
-
 """
+
 i = 0;
 while i < len(sizes):
     cmd = "sac2c -t cuda -v0 -O3 -dopra -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
     print cmd;
     os.system(cmd); 
-    instrument_source( cuda_out_src);
+    instrument_loop( cuda_out_src, 0, -1, sizes[i]);
     os.system( cuda_out_sac2c);
     os.system("rm " + tmp_file);
     j = 0;
     while j < runs:
         os.system( "./" + cuda_out_exe + " >> " + tmp_file);
         j = j + 1;
-    compute_average(sizes[i], tmp_file, cuda_reuse);
+    compute_loop_average(sizes[i], tmp_file, cuda_reuse);
     i = i + 1;
 
 i = 0;
@@ -226,14 +225,13 @@ while i < len(sizes):
     cmd = "sac2c -t cuda -v0 -O3 -dopra -dornb -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
     print cmd;
     os.system(cmd); 
-    instrument_source( cuda_out_src);
+    instrument_loop( cuda_out_src, 0, -1, sizes[i]);
     os.system( cuda_out_sac2c);
     os.system("rm " + tmp_file);
     j = 0;
     while j < runs:
         os.system( "./" + cuda_out_exe + " >> " + tmp_file);
         j = j + 1;
-    compute_average(sizes[i], tmp_file, cuda_reuse_rnb);
+    compute_loop_average(sizes[i], tmp_file, cuda_reuse_rnb);
     i = i + 1;
-"""
 

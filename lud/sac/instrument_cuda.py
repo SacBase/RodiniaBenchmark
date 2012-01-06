@@ -20,7 +20,7 @@ nth_while = int(nth_while);
 compute_kernel_time = int(compute_kernel_time);
 
 num_of_kernels = 0;
-runs = 4;
+runs = 2;
 kernel_names = [];  
 
 sac_out_exe = "sac_out";
@@ -39,8 +39,8 @@ sac_reuse = "./runtimes/sac_reuse.csv"
 cuda_reuse = "./runtimes/cuda_reuse.csv"
 
 
-sizes = [256,512,1024,2048,3072,4096];
-#sizes = [1024];
+sizes = [1024,2048,3072,4096];
+#sizes = [256, 512];
 
 def instrument_loop( source="", time_kernel=0, kernel_count=0, prob_size=0):
     _goto = 1;
@@ -88,7 +88,7 @@ def instrument_loop( source="", time_kernel=0, kernel_count=0, prob_size=0):
                 outfile.write("struct timeval kernel_start, kernel_end;\n");  
                 outfile.write("gettimeofday( &kernel_start, NULL);\n");  
                 outfile.write(line);
-                #outfile.write("cudaThreadSynchronize();\n");  
+                outfile.write("cudaThreadSynchronize();\n");  
                 outfile.write("gettimeofday( &kernel_end, NULL);\n");  
                 outfile.write("kernel_" + `kernel` + "_time += ((kernel_end.tv_sec*1000.0 + kernel_end.tv_usec/1000.0)-(kernel_start.tv_sec*1000.0 + kernel_start.tv_usec/1000.0));\n");
             else:
@@ -151,6 +151,7 @@ def compute_kernel_average( size, src, dst):
     infile.close();
     outfile.close();
 
+"""
 i = 0;
 while i < len(sizes):
     cmd = "sac2c -t cuda -v0 -O3 -norip -norwo -doexpar -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
@@ -201,20 +202,20 @@ while i < len(sizes):
     i = i + 1;
 
 kenrel_names = [];
-
 """
+
 i = 0;
 while i < len(sizes):
     cmd = "sac2c -t cuda -v0 -O3 -dopra -doexpar -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
     print cmd;
     os.system(cmd); 
-    instrument_loop( cuda_out_src);
+    instrument_loop( cuda_out_src, 0, -1, sizes[i]);
     os.system( cuda_out_sac2c);
     os.system("rm " + tmp_file);
     j = 0;
     while j < runs:
         os.system( "./" + cuda_out_exe + " ../input/sac_" + `sizes[i]` + ".dat >> " + tmp_file);
         j = j + 1;
-    compute_average(sizes[i], tmp_file, cuda_reuse);
+    compute_loop_average(sizes[i], tmp_file, cuda_reuse);
     i = i + 1;
-"""
+
