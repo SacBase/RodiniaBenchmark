@@ -1,14 +1,14 @@
 use StdIO: all;
 use Array: all;
 use CommandLine: all;
-/* use Benchmarking: all; */
+use Benchmarking: all; 
 
-#ifdef DOUBLE 
-#define DBL double
-#define TOD tod
-#else 
+#ifdef FLOAT 
 #define DBL float
 #define TOD tof
+#else 
+#define DBL double
+#define TOD tod
 #endif
 
 #ifndef SIZE
@@ -21,9 +21,18 @@ int main()
 /*
   mat = FibreScanFloatArray();
 */
+
+/*
   filename = argv(1);
   err, fd = fopen( filename, "r");
   mat = FibreScanFloatArray( fd);
+*/
+
+#ifdef FLOAT 
+  mat = FibreScanFloatArray( );
+#else 
+  mat = FibreScanDoubleArray( );
+#endif
 
 #ifdef C_IMP /* C implementation */
 
@@ -70,10 +79,9 @@ int main()
           }:modarray(mat);
   }
 #else /* SAC implementation 2 */
-/*
+
   interval0 = getInterval( "LUD", 0 );
   start( interval0 );
-*/
 
   for( i = 0; i < SIZE-1; i++) {
 
@@ -91,29 +99,15 @@ int main()
           }:modarray(mat);
   }
 
-/*
   end( interval0 );
-  printResult( interval0 );
-  destroyInterval( interval0 );
-*/
 
 #endif
 
 #ifdef OUTPUT
-/*
-  for( i = 0; i < SIZE; i++) {
-    for( j = 0; j < SIZE; j++) {
-      printf("%f ", mat[i, j]);
-    }
-    printf("\n");
-  }
-*/
+  print(mat);
+  return( 0);
 #else
-/*
-  printf("[0 0]:%f\n", mat[0,0]);
-*/
-#endif
-
   return( toi(mat[0,0]));
+#endif
 }
 
