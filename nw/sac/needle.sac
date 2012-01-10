@@ -2,11 +2,12 @@ use StdIO: all;
 use Array: all;
 use Rand: all except{srandom};
 use Random: {srandom};
+use Benchmarking: all;
 
 #define LIMIT -999
 
 #ifndef SIZE
-#define SIZE 64
+#define SIZE 4096
 #endif
 
 #define ROWS       SIZE
@@ -119,6 +120,10 @@ int runTest( )
                      }:res;
                    }:genarray([max_rows, max_cols], 0);
 
+
+  interval0 = getInterval( "NW", 0 );
+  start( interval0 ); 
+
   for( i = 1; i < max_cols; i++) {
     input_itemsets = with {
                        ( [1,1] <= iv=[r,c] < [1+i,1+i]) {
@@ -134,6 +139,9 @@ int runTest( )
                      }:modarray( input_itemsets);
   }
 
+/*
+  printf("Finished first loop!\n");
+*/
 
   for( i = 1; i < max_cols-1; i++) {
     input_itemsets = with {
@@ -150,6 +158,7 @@ int runTest( )
                      }:modarray( input_itemsets);
   }
 
+  end( interval0 ); 
 
 /*
   for( i = 1; i < max_cols-1; i++) {
@@ -168,15 +177,8 @@ int runTest( )
   }
 */
 #ifdef OUTPUT 
-/*
-  for( i = 0; i < max_rows; i++) {
-    for( j = 0; j < max_cols; j++) {
-      printf("%d ", input_itemsets[i, j]);
-    }
-    printf("\n");
-  }
-*/
-  return( input_itemsets[0,0]);
+  print(input_itemsets);
+  return( 0);
 #else
   /* printf("%d\n", input_itemsets[0,0]); */
   return( input_itemsets[0,0]);
