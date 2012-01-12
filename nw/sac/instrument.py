@@ -6,13 +6,12 @@ import os;
 import random;
 
 sizes = [1024, 2048, 3072, 4096]; 
-#sizes = [4096]; 
 
 max_measure_regions = 10;
 actual_measure_regions = 0;
 
 # Total number of runs for each compilation
-runs = 3;
+runs = 1;
 
 # Variables for various file names
 out_exe = "a.out"
@@ -204,12 +203,12 @@ def instrument_time( source=""):
                 outfile.write("static struct timeval start" + `i` + ", end" + `i` + ";\n"); 
                 i = i + 1;
  
-        elif line.find("SAC_ND_FUNAP2(SACf_C99Benchmarking__start__SACt_C99Benchmarking") != -1:
+        elif line.find("SAC_ND_FUNAP2(SACf_C99Benchmarking__start__SACt_C99Benchmarking") != -1 or line.find( "SAC_ND_FUNAP2(SACf_C99Benchmarking_CL_ST__start__SACt_C99Benchmarking__Interval") != -1:
             outfile.write("gettimeofday( &start" + `measure_region` + ", NULL);\n");
             measure_region = measure_region + 1;
             actual_measure_regions = actual_measure_regions + 1;
 
-        elif line.find("SAC_ND_FUNAP2(SACf_C99Benchmarking__end__SACt_C99Benchmarking") != -1:
+        elif line.find("SAC_ND_FUNAP2(SACf_C99Benchmarking__end__SACt_C99Benchmarking") != -1  or line.find( "SAC_ND_FUNAP2(SACf_C99Benchmarking_CL_ST__end__SACt_C99Benchmarking__Interval") != -1:
             measure_region = measure_region - 1;
             outfile.write("gettimeofday( &end" + `measure_region` + ", NULL);\n");
             outfile.write("runtime" + `measure_region` + \
@@ -265,15 +264,10 @@ out_srcs = [ "a.out.cu", "a.out.cu"];
 runtime_csv = [ "./runtimes/cuda_baseline.csv", "./runtimes/cuda_memopt.csv"];
 """
 
-standard_flags = ["-t cuda -nomemopt"];
-out_srcs = [ "a.out.cu"];
-runtime_csv = [ "./runtimes/cuda_baseline.csv"];
+standard_flags = ["-mt -numthreads " + `threads`];
+out_srcs = ["a.out.c"];
+runtime_csv = ["./runtimes/sac_mt.csv"];
 
-"""
-standard_flags = ["-t cuda"];
-out_srcs = [ "a.out.cu"];
-runtime_csv = [ "./runtimes/cuda_memopt.csv"];
-"""
 
 # Compile and meaures for standard runs, i.e. sac sequential,
 # sac multi-threaded, cuda baseline and cuda with memopt.
