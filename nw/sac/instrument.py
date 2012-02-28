@@ -11,7 +11,7 @@ max_measure_regions = 10;
 actual_measure_regions = 0;
 
 # Total number of runs for each compilation
-runs = 1;
+runs = 2;
 
 # Variables for various file names
 out_exe = "a.out"

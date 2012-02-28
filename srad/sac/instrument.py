@@ -263,7 +263,11 @@ runtime_csv = ["./runtimes/sac_seq.csv", "./runtimes/sac_mt.csv", "./runtimes/cu
 standard_flags = [ "-mt -numthreads " + `threads`];
 out_srcs = ["a.out.c"];
 runtime_csv = ["./runtimes/sac_mt.csv"];
-
+"""
+standard_flags = [ ""];
+out_srcs = ["a.out.c"];
+runtime_csv = ["./runtimes/sac_seq.csv"];
+"""
 # Compile and meaures for standard runs, i.e. sac sequential,
 # sac multi-threaded, cuda baseline and cuda with memopt.
 r = 0;

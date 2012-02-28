@@ -5,7 +5,8 @@ import datetime;
 import os;
 import random;
 
-sizes = [1024, 2048, 3072, 4096]; 
+#sizes = [1024, 2048, 3072, 4096]; 
+sizes = [1024]; 
 
 max_measure_regions = 10;
 actual_measure_regions = 0;
@@ -259,9 +260,9 @@ out_srcs = ["a.out.c", "a.out.c", "a.out.cu", "a.out.cu"];
 runtime_csv = ["./runtimes/sac_seq.csv", "./runtimes/sac_mt.csv", "./runtimes/cuda_baseline.csv", "./runtimes/cuda_memopt.csv"];
 """
 
-standard_flags = ["-mt -numthreads " + `threads`];
+standard_flags = [""];
 out_srcs = ["a.out.c"];
-runtime_csv = ["./runtimes/sac_mt.csv"];
+runtime_csv = ["./runtimes/sac_seq.csv"];
 
 # Compile and meaures for standard runs, i.e. sac sequential,
 # sac multi-threaded, cuda baseline and cuda with memopt.
