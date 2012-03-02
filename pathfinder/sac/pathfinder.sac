@@ -6,25 +6,31 @@ use Benchmarking: all;
 
 
 #ifndef SIZE
-#define SIZE 2097152 
+#define SIZE 131072 
 #endif
 
 #ifndef ITER 
-#define ITER 100 
+#define ITER 200 
 #endif
 
 #define MIN(a, b) ((a)<=(b) ? (a) : (b))
+
+int id( int x)
+{
+  return( x);
+}
 
 int main()
 {
   rows = ITER;
   cols = SIZE;
 
+  srandom(7);  
+
   wall = genarray([rows,cols], 0); 
   result = genarray([cols], 0); 
 
-  srandom(7);  
-
+/*
   for (i = 0; i < rows; i++) {
     for (j = 0; j < cols; j++) {
       wall[i,j] = rand() % 10;
@@ -35,31 +41,21 @@ int main()
     result[j] = wall[0,j];
   }
 
-#ifdef OUTPUT 
-/*
-  for (i = 0; i < rows; i++) {
-    for (j = 0; j < cols; j++) {
-      printf("%d ",wall[i*SIZE+j]) ;
-    }
-    printf("\n") ;
-  }
 */
-#endif
+
+  wall = with {
+           ([0,0] <= iv < [rows, cols]) : id( rand()%10);
+         }:genarray([rows,cols], 0);
+  
+  result = with {
+             ([0] <= iv < [cols]) : id( wall[0,iv[0]]);
+           }:genarray([cols], 0);
+
+
+  interval0 = getInterval( "PF", 0 );
+  start( interval0 ); 
 
   for (t = 0; t < rows-1; t++) {
-/*
-    #pragma omp parallel for private(min)
-    for(n = 0; n < cols; n++){
-      min = src[n];
-      if (n > 0) {
-        min = MIN(min, src[n-1]);
-      }
-      if (n < cols-1) {
-        min = MIN(min, src[n+1]);
-      }
-      dst[n] = wall[(t+1)*SIZE+n]+min;
-    }
-*/
     result = with {
 	    ([0] <= iv=[n] < [cols]) {
 	      m = result[n];
@@ -75,15 +71,19 @@ int main()
 	  }:modarray(result); 
   }
 
+  end( interval0 ); 
+
 #ifdef OUTPUT 
   for (i = 0; i < cols; i++) {
     printf("%d ",result[i]);
   }
   printf("\n");
 #else
+/*
   printf("%d\n", result[0]);
+*/
 #endif
 
-  return( 0);
+  return( result[0]);
 }
 

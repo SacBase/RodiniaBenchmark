@@ -5,11 +5,11 @@
 
 
 #ifndef SIZE
-#define SIZE 2097152 
+#define SIZE 131072 
 #endif
 
 #ifndef ITER 
-#define ITER 100 
+#define ITER 200 
 #endif
 
 #define MIN(a, b) ((a)<=(b) ? (a) : (b))
@@ -42,20 +42,8 @@ int main(int argc, char** argv)
     result[j] = wall[j];
   }
 
-#ifdef OUTPUT 
-/*
-  for (i = 0; i < rows; i++) {
-    for (j = 0; j < cols; j++) {
-      printf("%d ",wall[i*SIZE+j]) ;
-    }
-    printf("\n") ;
-  }
-*/
-#endif
-
   dst = result;
   src = (int*)malloc(sizeof(int)*cols);
-
 
   struct timeval tv1, tv2;
   gettimeofday( &tv1, NULL);
@@ -80,7 +68,7 @@ int main(int argc, char** argv)
 
   gettimeofday( &tv2, NULL);
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
-  printf("%f\n", runtime);
+  //printf("%f\n", runtime);
 
 #ifdef OUTPUT 
   for (i = 0; i < cols; i++) {
