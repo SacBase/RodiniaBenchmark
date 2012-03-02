@@ -68,7 +68,7 @@ int main(int argc, char** argv)
 
   gettimeofday( &tv2, NULL);
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
-  //printf("%f\n", runtime);
+  printf("%f\n", runtime);
 
 #ifdef OUTPUT 
   for (i = 0; i < cols; i++) {
@@ -76,13 +76,15 @@ int main(int argc, char** argv)
   }
   printf("\n");
 #else
-  printf("%d ",dst[0]);
+  //printf("%d ",dst[0]);
 #endif
+
+  int res = dst[0];
 
   free(wall);
   free(dst);
   free(src);
  
-  return( 0);
+  return( res);
 }
 
