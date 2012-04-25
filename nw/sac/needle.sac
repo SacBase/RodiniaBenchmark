@@ -177,7 +177,17 @@ int runTest( )
   }
 */
 #ifdef OUTPUT 
+/*
   print(input_itemsets);
+*/
+
+  for( i = 0; i < max_rows; i++) {
+    for( j = 0; j < max_cols; j++) {
+      printf("%d ", input_itemsets[i,j]);
+    }
+    printf("\n");
+  }
+
   return( 0);
 #else
   /* printf("%d\n", input_itemsets[0,0]); */
