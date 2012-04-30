@@ -5,8 +5,8 @@ import datetime;
 import os;
 import random;
 
-sizes = [102400, 204800, 409600, 819200]; 
-#sizes = [1024]; 
+#sizes = [131072, 262144, 524288, 1048576]; 
+sizes = [1024,2048, 3072]; 
 
 max_measure_regions = 10;
 actual_measure_regions = 0;
@@ -255,14 +255,14 @@ if flops:
 
 #===========================================================================================================================================
 """
-standard_flags = ["", "-mt -numthreads " + `threads`, "-t cuda -nomemopt", "-t cuda"];
-out_srcs = ["a.out.c", "a.out.c", "a.out.cu", "a.out.cu"];
-runtime_csv = ["./runtimes/sac_seq.csv", "./runtimes/sac_mt.csv", "./runtimes/cuda_baseline.csv", "./runtimes/cuda_memopt.csv"];
+standard_flags = ["-DSEQ -mt -numthreads " + `threads`, "-t cuda -nomemopt", "-t cuda"];
+out_srcs = ["a.out.c", "a.out.cu", "a.out.cu"];
+runtime_csv = ["./runtimes/sac_mt.csv", "./runtimes/cuda_baseline.csv", "./runtimes/cuda_memopt.csv"];
 """
 
-standard_flags = ["-DSEQ -mt -numthreads " + `threads`];
-out_srcs = ["a.out.c"];
-runtime_csv = ["./runtimes/sac_mt.csv"];
+standard_flags = ["-DSEQ -mt -numthreads " + `threads`, "-t cuda -nomemopt", "-t cuda"];
+out_srcs = ["a.out.c", "a.out.cu", "a.out.cu"];
+runtime_csv = ["./runtimes/sac_mt.csv", "./runtimes/cuda_baseline.csv", "./runtimes/cuda_memopt.csv"];
 
 # Compile and meaures for standard runs, i.e. sac sequential,
 # sac multi-threaded, cuda baseline and cuda with memopt.
@@ -283,7 +283,7 @@ while r < len(standard_flags):
 	# Perform several runs and store the runtimes in tmp file 
 	j = 0;
 	while j < runs:
-            os.system( "./" + out_exe + " < ../input/sac_" + `sizes[i]` + ".txt >> " + all_runtimes);
+            os.system( "./" + out_exe + " >> " + all_runtimes);
 	    j = j + 1;
 
 	i = i + 1;
@@ -322,7 +322,7 @@ while r < len(opt_flags):
 	# Perform several runs and store the runtimes in tmp file 
 	j = 0;
 	while j < runs:
-            os.system( "./" + out_exe + " < ../input/sac_" + `sizes[i]` + ".txt >> " + all_runtimes);
+            os.system( "./" + out_exe + " >> " + all_runtimes);
 	    j = j + 1;
 
 	i = i + 1;
