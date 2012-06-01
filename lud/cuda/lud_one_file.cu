@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <time.h>
+#include <sys/time.h>
+#include <shrUtils.h>
+#include <cutil_inline.h>
+
+
 
 #ifndef SIZE
 #define SIZE 256
@@ -355,6 +361,129 @@ int main(int argc, char **argv)
   cudaMemcpy(mat, mat_in_d, sizeof(double)*SIZE*SIZE, cudaMemcpyDeviceToHost);
 
 #endif
+
+
+#ifdef IPU 
+
+  //struct timeval copy_start, copy_end, compute_start, copmute_end; 
+  float tmp, copy_time = 0.0, compute_time = 0.0;
+
+  cudaEvent_t copy_start, copy_stop, compute_start, compute_stop;
+  cutilSafeCall( cudaEventCreate(&copy_start) );
+  cutilSafeCall( cudaEventCreate(&copy_stop) );
+  cutilSafeCall( cudaEventCreate(&compute_start) );
+  cutilSafeCall( cudaEventCreate(&compute_stop) );
+
+
+  cudaMalloc((void**)&mat_in_d, sizeof(double)*SIZE*SIZE); 
+  cudaMemcpy(mat_in_d, mat, sizeof(double)*SIZE*SIZE, cudaMemcpyHostToDevice);
+
+  gettimeofday( &tv1, NULL);
+  for( i = 0; i < SIZE-1; i++) {
+
+    cutilSafeCall( cudaEventRecord(compute_start, 0) );
+    grid.x = 1/BLOCK_X+1; 
+    grid.y = (SIZE-i-1)/BLOCK_Y+1; 
+    column<<<grid, block>>>( mat_in_d, i); 
+    //cudaThreadSynchronize();
+    cutilSafeCall( cudaEventRecord(compute_stop, 0) );
+    cutilSafeCall( cudaEventSynchronize(compute_stop) );
+    cutilSafeCall( cudaEventElapsedTime(&tmp, compute_start, compute_stop) );
+    compute_time += tmp; 
+
+
+    cudaMalloc((void**)&mat_out_d, sizeof(double)*SIZE*SIZE); 
+
+    cutilSafeCall( cudaEventRecord(copy_start, 0) );
+    /********** Copy Kernels ************/
+    grid.x = SIZE/BLOCK_X+1; 
+    grid.y = (i+1)/BLOCK_Y+1; 
+    copy<<<grid, block>>>( mat_out_d, mat_in_d, 0, 0, i+1, SIZE); 
+    //cudaThreadSynchronize();
+
+    grid.x = (i+1)/BLOCK_X+1; 
+    grid.y = (SIZE-i-1)/BLOCK_Y+1; 
+    copy<<<grid, block>>>( mat_out_d, mat_in_d, i+1, 0, SIZE, i+1); 
+    //cudaThreadSynchronize();
+    /************************************/
+    cutilSafeCall( cudaEventRecord(copy_stop, 0) );
+    cutilSafeCall( cudaEventSynchronize(copy_stop) );
+    cutilSafeCall( cudaEventElapsedTime(&tmp, copy_start, copy_stop) );
+    copy_time += tmp; 
+
+
+    cutilSafeCall( cudaEventRecord(compute_start, 0) );
+    grid.x = (SIZE-i-1)/BLOCK_X+1; 
+    grid.y = (SIZE-i-1)/BLOCK_Y+1;
+    submatrix<<<grid, block>>>( mat_out_d, mat_in_d, i); 
+    //cudaThreadSynchronize();
+    cutilSafeCall( cudaEventRecord(compute_stop, 0) );
+    cutilSafeCall( cudaEventSynchronize(compute_stop) );
+    cutilSafeCall( cudaEventElapsedTime(&tmp, compute_start, compute_stop) );
+    compute_time += tmp; 
+
+    cudaFree(mat_in_d);
+    mat_in_d = mat_out_d;
+  }
+
+  gettimeofday( &tv2, NULL);
+  runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
+
+  printf("Total time: %f, Copy time: %f, Compute time: %f\n", runtime, copy_time, compute_time);
+
+  cudaMemcpy(mat, mat_in_d, sizeof(double)*SIZE*SIZE, cudaMemcpyDeviceToHost);
+
+#endif
+
+
+#ifdef CE /* copy elimination */ 
+
+
+  cudaMalloc((void**)&mat_in_d, sizeof(double)*SIZE*SIZE); 
+  cudaMemcpy(mat_in_d, mat, sizeof(double)*SIZE*SIZE, cudaMemcpyHostToDevice);
+
+  gettimeofday( &tv1, NULL);
+  for( i = 0; i < SIZE-1; i++) {
+
+    grid.x = 1/BLOCK_X+1; 
+    grid.y = (SIZE-i-1)/BLOCK_Y+1; 
+    column<<<grid, block>>>( mat_in_d, i); 
+    //cudaThreadSynchronize();
+
+    //cudaMalloc((void**)&mat_out_d, sizeof(double)*SIZE*SIZE); 
+
+    /********** Copy Kernels ************/
+    //grid.x = SIZE/BLOCK_X+1; 
+    //grid.y = (i+1)/BLOCK_Y+1; 
+    //copy<<<grid, block>>>( mat_out_d, mat_in_d, 0, 0, i+1, SIZE); 
+    //cudaThreadSynchronize();
+
+    //grid.x = (i+1)/BLOCK_X+1; 
+    //grid.y = (SIZE-i-1)/BLOCK_Y+1; 
+    //copy<<<grid, block>>>( mat_out_d, mat_in_d, i+1, 0, SIZE, i+1); 
+    //cudaThreadSynchronize();
+    /************************************/
+
+    grid.x = (SIZE-i-1)/BLOCK_X+1; 
+    grid.y = (SIZE-i-1)/BLOCK_Y+1;
+    submatrix<<<grid, block>>>( mat_in_d, mat_in_d, i); 
+    //cudaThreadSynchronize();
+
+    //cudaFree(mat_in_d);
+    //mat_in_d = mat_out_d;
+  }
+
+  gettimeofday( &tv2, NULL);
+  runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
+  printf("%f\n", runtime);
+
+
+  cudaMemcpy(mat, mat_in_d, sizeof(double)*SIZE*SIZE, cudaMemcpyDeviceToHost);
+
+#endif
+
+
+
 
   res = (int)mat[0];
 
