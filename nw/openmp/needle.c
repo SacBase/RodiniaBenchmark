@@ -65,22 +65,6 @@ int blosum62[24][24] = {
 {-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1}
 };
 
-double gettime() {
-  struct timeval t;
-  gettimeofday(&t,NULL);
-  return t.tv_sec+t.tv_usec*1e-6;
-}
-
-
-
-void usage(int argc, char **argv)
-{
-  fprintf(stderr, "Usage: %s <max_rows/max_cols> <penalty> <num_threads>\n", argv[0]);
-  fprintf(stderr, "\t<dimension>      - x and y dimensions\n");
-  fprintf(stderr, "\t<penalty>        - penalty(positive integer)\n");
-  fprintf(stderr, "\t<num_threads>    - no. of threads\n");
-  exit(1);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 //! Run a simple test for CUDA
@@ -144,7 +128,7 @@ void runTest( int argc, char** argv)
   }
 
 
-#ifdef FAST
+#if V == 1
 
   gettimeofday( &tv1, NULL);
 
@@ -187,34 +171,33 @@ void runTest( int argc, char** argv)
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
   printf("%f\n", runtime);
 
-#else
+#elif V == 2
+
   int r, c;
 
   gettimeofday( &tv1, NULL);
+
+  /* Upper left */
   for( i = 1; i < max_cols; i++) {
     for( r = 1; r < 1+i; r++) {
       for( c = 1; c < 1+i; c++) {
 	if( r == (i - c + 1)) {
 	  input_itemsets[r*max_cols+c] = maximum( input_itemsets[(r-1)*max_cols+(c-1)]+ referrence[r*max_cols+c], 
-		                                  input_itemsets[r*max_cols+(c-1)] - penalty, 
-			                          input_itemsets[(r-1)*max_cols+c] - penalty);
+				       input_itemsets[r*max_cols+(c-1)] - penalty, 
+				       input_itemsets[(r-1)*max_cols+c] - penalty);
 	}
       }
     }
   }
-  gettimeofday( &tv2, NULL);
-  runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
-  printf("%f\n", runtime);
 
-
-  gettimeofday( &tv1, NULL);
+  /* Lower right */
   for( i = 1; i < max_cols-1; i++) {
     for( r = 1+i; r < max_rows; r++) {
       for( c = 1+i; c < max_cols; c++) {
         if( r == (max_cols - c + i)) { 
 	  input_itemsets[r*max_cols+c] = maximum( input_itemsets[(r-1)*max_cols+(c-1)]+ referrence[r*max_cols+c], 
-		                                  input_itemsets[r*max_cols+(c-1)] - penalty, 
-			                          input_itemsets[(r-1)*max_cols+c] - penalty);
+	                               input_itemsets[r*max_cols+(c-1)] - penalty, 
+	                               input_itemsets[(r-1)*max_cols+c] - penalty);
 	 }
       }
     }
@@ -222,6 +205,98 @@ void runTest( int argc, char** argv)
   gettimeofday( &tv2, NULL);
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
   printf("%f\n", runtime);
+
+#else
+  int r, c;
+  int *tmp;
+
+  gettimeofday( &tv1, NULL);
+
+  /* Upper left */
+  for( i = 1; i < max_cols; i++) {
+    tmp = (int *)malloc( max_rows * max_cols * sizeof(int) );
+
+    for( r = i+1; r < max_rows; r++) {
+      for( c = 0; c < max_cols; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; 
+      }
+    }
+    for( r = 0; r < 1; r++) {
+      for( c = 0; c < max_cols; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c];
+      }
+    }
+    for( r = 1; r < i+1; r++) {
+      for( c = i+1; c < max_cols; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; 
+      }
+    }
+    for( r = 1; r < i+1; r++) {
+      for( c = 0; c < 1; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c];
+      }
+    }
+    for( r = 1; r < 1+i; r++) {
+      for( c = 1; c < 1+i; c++) {
+	if( r == (i - c + 1)) {
+	  tmp[r*max_cols+c] = maximum( input_itemsets[(r-1)*max_cols+(c-1)]+ referrence[r*max_cols+c], 
+				       input_itemsets[r*max_cols+(c-1)] - penalty, 
+				       input_itemsets[(r-1)*max_cols+c] - penalty);
+	}
+        else {
+          tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; 
+        }
+      }
+    }
+    free(input_itemsets); 
+    input_itemsets = tmp;
+  }
+
+  /* Lower right */
+  for( i = 1; i < max_cols-1; i++) {
+    tmp = (int *)malloc( max_rows * max_cols * sizeof(int) );
+
+    for( r = max_rows; r < max_rows; r++) {
+      for( c = 0; c < max_cols; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; // Empty partition! 
+      }
+    }
+    for( r = 0; r < i+1; r++) {
+      for( c = 0; c < max_cols; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c];
+      }
+    }
+    for( r = i+1; r < max_rows; r++) {
+      for( c = max_cols; c < max_cols; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; // Empty partition! 
+      }
+    }
+    for( r = i+1; r < max_rows; r++) {
+      for( c = 0; c < i+1; c++) {
+        tmp[r*max_cols+c] = input_itemsets[r*max_cols+c];
+      }
+    }
+    for( r = 1+i; r < max_rows; r++) {
+      for( c = 1+i; c < max_cols; c++) {
+        if( r == (max_cols - c + i)) { 
+	  tmp[r*max_cols+c] = maximum( input_itemsets[(r-1)*max_cols+(c-1)]+ referrence[r*max_cols+c], 
+	                               input_itemsets[r*max_cols+(c-1)] - penalty, 
+	                               input_itemsets[(r-1)*max_cols+c] - penalty);
+	 }
+         else {
+           tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; 
+         }
+      }
+    }
+
+    free(input_itemsets); 
+    input_itemsets = tmp;
+  }
+
+  gettimeofday( &tv2, NULL);
+  runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
+  printf("%f\n", runtime);
+
 #endif
 
 
