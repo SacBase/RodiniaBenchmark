@@ -206,16 +206,21 @@ void runTest( int argc, char** argv)
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
   printf("%f\n", runtime);
 
-#else
+#elif V == 3
   int r, c;
   int *tmp;
 
+  struct timeval copy_start, copy_stop, compute_start, compute_stop;
+  double copy_time=0.0, compute_time=0.0;
+  
+
   gettimeofday( &tv1, NULL);
 
+  tmp = (int *)malloc( max_rows * max_cols * sizeof(int) );
   /* Upper left */
   for( i = 1; i < max_cols; i++) {
-    tmp = (int *)malloc( max_rows * max_cols * sizeof(int) );
 
+    gettimeofday( &copy_start, NULL);
     for( r = i+1; r < max_rows; r++) {
       for( c = 0; c < max_cols; c++) {
         tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; 
@@ -236,6 +241,10 @@ void runTest( int argc, char** argv)
         tmp[r*max_cols+c] = input_itemsets[r*max_cols+c];
       }
     }
+    gettimeofday( &copy_stop, NULL);
+    copy_time += ((copy_stop.tv_sec*1000.0+ copy_stop.tv_usec/1000.0)-(copy_start.tv_sec*1000.0+ copy_start.tv_usec/1000.0));
+
+    gettimeofday( &compute_start, NULL);
     for( r = 1; r < 1+i; r++) {
       for( c = 1; c < 1+i; c++) {
 	if( r == (i - c + 1)) {
@@ -248,34 +257,48 @@ void runTest( int argc, char** argv)
         }
       }
     }
-    free(input_itemsets); 
+    gettimeofday( &compute_stop, NULL);
+    compute_time += ((compute_stop.tv_sec*1000.0+ compute_stop.tv_usec/1000.0)-(compute_start.tv_sec*1000.0+ compute_start.tv_usec/1000.0));
+
+    int *p; 
+    p = input_itemsets; 
     input_itemsets = tmp;
+    tmp = input_itemsets;
   }
+
 
   /* Lower right */
   for( i = 1; i < max_cols-1; i++) {
-    tmp = (int *)malloc( max_rows * max_cols * sizeof(int) );
 
+    gettimeofday( &copy_start, NULL);
+/*
     for( r = max_rows; r < max_rows; r++) {
       for( c = 0; c < max_cols; c++) {
         tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; // Empty partition! 
       }
     }
+*/
     for( r = 0; r < i+1; r++) {
       for( c = 0; c < max_cols; c++) {
         tmp[r*max_cols+c] = input_itemsets[r*max_cols+c];
       }
     }
+/*
     for( r = i+1; r < max_rows; r++) {
       for( c = max_cols; c < max_cols; c++) {
         tmp[r*max_cols+c] = input_itemsets[r*max_cols+c]; // Empty partition! 
       }
     }
+*/
     for( r = i+1; r < max_rows; r++) {
       for( c = 0; c < i+1; c++) {
         tmp[r*max_cols+c] = input_itemsets[r*max_cols+c];
       }
     }
+    gettimeofday( &copy_stop, NULL);
+    copy_time += ((copy_stop.tv_sec*1000.0+ copy_stop.tv_usec/1000.0)-(copy_start.tv_sec*1000.0+ copy_start.tv_usec/1000.0));
+
+    gettimeofday( &compute_start, NULL);
     for( r = 1+i; r < max_rows; r++) {
       for( c = 1+i; c < max_cols; c++) {
         if( r == (max_cols - c + i)) { 
@@ -288,14 +311,57 @@ void runTest( int argc, char** argv)
          }
       }
     }
+    gettimeofday( &compute_stop, NULL);
+    compute_time += ((compute_stop.tv_sec*1000.0+ compute_stop.tv_usec/1000.0)-(compute_start.tv_sec*1000.0+ compute_start.tv_usec/1000.0));
 
-    free(input_itemsets); 
+    int *p; 
+    p = input_itemsets; 
     input_itemsets = tmp;
+    tmp = input_itemsets;
   }
 
   gettimeofday( &tv2, NULL);
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
-  printf("%f\n", runtime);
+  printf("Total time %f, Compute time %f, Copy time %f\n", runtime, compute_time, copy_time);
+
+  free(tmp); 
+#else
+
+  int r, c;
+
+  gettimeofday( &tv1, NULL);
+
+  /* Upper left */
+  for( i = 1; i < max_cols; i++) {
+
+    for( r = 1; r < 1+i; r++) {
+      for( c = 1; c < 1+i; c++) {
+	if( r == (i - c + 1)) {
+	  input_itemsets[r*max_cols+c] = maximum( input_itemsets[(r-1)*max_cols+(c-1)]+ referrence[r*max_cols+c], 
+				       input_itemsets[r*max_cols+(c-1)] - penalty, 
+				       input_itemsets[(r-1)*max_cols+c] - penalty);
+	}
+      }
+    }
+  }
+
+  /* Lower right */
+  for( i = 1; i < max_cols-1; i++) {
+
+    for( r = 1+i; r < max_rows; r++) {
+      for( c = 1+i; c < max_cols; c++) {
+        if( r == (max_cols - c + i)) { 
+	  input_itemsets[r*max_cols+c] = maximum( input_itemsets[(r-1)*max_cols+(c-1)]+ referrence[r*max_cols+c], 
+	                               input_itemsets[r*max_cols+(c-1)] - penalty, 
+	                               input_itemsets[(r-1)*max_cols+c] - penalty);
+	 }
+      }
+    }
+  }
+
+  gettimeofday( &tv2, NULL);
+  runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
+  printf("Total time %f\n", runtime);
 
 #endif
 
