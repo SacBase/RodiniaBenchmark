@@ -4,6 +4,8 @@
 #include <math.h>
 #include <sys/time.h>
 #include <omp.h>
+#include <shrUtils.h>
+#include <cutil_inline.h>
 
 
 #define LIMIT -999
@@ -54,6 +56,54 @@ int blosum62[24][24] = {
 { 0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4},
 {-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1}
 };
+
+__global__ void upper_left_opt(int *dst, int *input_itemsets, int *reference, int max_rows, int max_cols, int i, int penalty)
+{
+   int tmp;
+   tmp = blockIdx.x + blockIdx.y;
+   if( tmp == blockDim.x-1 || tmp == blockDim.x-2 || tmp == blockDim.x) { 
+
+     int r, c;
+
+     r = blockIdx.y*blockDim.y+threadIdx.y+1; 
+     c = blockIdx.x*blockDim.x+threadIdx.x+1; 
+
+     if( r >= i+1 || c >= i+1) return;
+
+     if( r == (i - c + 1)) {
+       int base = r*max_cols+c;
+       dst[base] = maximum( input_itemsets[base-max_cols-1]+ reference[base], 
+			    input_itemsets[base-1] - penalty, 
+			    input_itemsets[base-max_cols] - penalty);
+     }
+   }
+}
+
+
+
+__global__ void lower_right_opt(int *dst, int *input_itemsets, int *reference, int max_rows, int max_cols, int i, int penalty)
+{
+   int tmp;
+   tmp = blockIdx.x + blockIdx.y;
+
+   if( tmp == blockDim.x-1 || tmp == blockDim.x-2 || tmp == blockDim.x) { 
+     int r, c;
+    
+     r = blockIdx.y*blockDim.y+threadIdx.y+i+1; 
+     c = blockIdx.x*blockDim.x+threadIdx.x+i+1; 
+
+     if( r >= max_rows || c >= max_cols) return;
+
+     if( r == (max_cols - c + i)) {
+       dst[r*max_cols+c] 
+		    = maximum( input_itemsets[(r-1)*max_cols+c-1]+ reference[r*max_cols+c], 
+		      input_itemsets[r*max_cols+c-1] - penalty, 
+		      input_itemsets[(r-1)*max_cols+c] - penalty);
+     }
+   }
+}
+
+
 
 __global__ void upper_left(int *dst, int *input_itemsets, int *reference, int max_rows, int max_cols, int i, int penalty)
 {
@@ -188,7 +238,7 @@ int main( int argc, char** argv)
     }
   }
 
-#if V == 1
+#ifdef UNOPT
   /* unoptimised */
 
   gettimeofday( &tv1, NULL);
@@ -285,8 +335,9 @@ int main( int argc, char** argv)
   gettimeofday( &tv2, NULL);
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
   printf("%f\n", runtime);
+#endif
 
-#elif V == 2
+#ifdef MEMOPT
   /* memopt */
  
   cudaMemcpy(input_itemsets_d, input_itemsets, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
@@ -378,8 +429,18 @@ int main( int argc, char** argv)
   printf("%f\n", runtime);
 
   cudaMemcpy(input_itemsets, input_itemsets_d, sizeof(int)*max_rows*max_cols, cudaMemcpyDeviceToHost); 
+#endif
 
-#elif V == 3
+#ifdef LAO
+
+  float tmp, copy_time = 0.0, compute_time = 0.0;
+
+  cudaEvent_t copy_start, copy_stop, compute_start, compute_stop;
+  cutilSafeCall( cudaEventCreate(&copy_start) );
+  cutilSafeCall( cudaEventCreate(&copy_stop) );
+  cutilSafeCall( cudaEventCreate(&compute_start) );
+  cutilSafeCall( cudaEventCreate(&compute_stop) );
+
   /* memopt+lao */
 
   cudaMemcpy(input_itemsets_d, input_itemsets, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
@@ -392,6 +453,9 @@ int main( int argc, char** argv)
 
   for( i = 1; i < max_cols; i++) {
 
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(copy_start, 0) );
+#endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
       dim3 grid(max_cols/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
@@ -415,12 +479,30 @@ int main( int argc, char** argv)
       dim3 grid(1/BLOCK_X+1,i/BLOCK_Y+1);
       copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, 1, 0, i+1, 1);
     }
+    cudaThreadSynchronize();
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(copy_stop, 0) );
+    cutilSafeCall( cudaEventSynchronize(copy_stop) );
+    cutilSafeCall( cudaEventElapsedTime(&tmp, copy_start, copy_stop) );
+    copy_time += tmp; 
+#endif
 
+
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(compute_start, 0) );
+#endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
       dim3 grid(i/BLOCK_X+1,i/BLOCK_Y+1);
       upper_left_copy<<<grid, block>>>( tmp_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
     }
+    cudaThreadSynchronize();
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(compute_stop, 0) );
+    cutilSafeCall( cudaEventSynchronize(compute_stop) );
+    cutilSafeCall( cudaEventElapsedTime(&tmp, compute_start, compute_stop) );
+    compute_time += tmp; 
+#endif
    
     p_d = input_itemsets_d;  
     input_itemsets_d = tmp_d;
@@ -429,6 +511,9 @@ int main( int argc, char** argv)
 
   for( i = 1; i < max_cols-1; i++) {
 
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(copy_start, 0) );
+#endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
       dim3 grid(max_cols/BLOCK_X+1,0/BLOCK_Y+1);
@@ -452,12 +537,30 @@ int main( int argc, char** argv)
       dim3 grid((i+1)/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
       copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, i+1, 0, max_rows, i+1);
     }
+    cudaThreadSynchronize();
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(copy_stop, 0) );
+    cutilSafeCall( cudaEventSynchronize(copy_stop) );
+    cutilSafeCall( cudaEventElapsedTime(&tmp, copy_start, copy_stop) );
+    copy_time += tmp; 
+#endif
 
+
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(compute_start, 0) );
+#endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
       dim3 grid((max_cols-i-1)/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
       lower_right_copy<<<grid, block>>>( tmp_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
     }
+    cudaThreadSynchronize();
+#ifdef EVENT
+    cutilSafeCall( cudaEventRecord(compute_stop, 0) );
+    cutilSafeCall( cudaEventSynchronize(compute_stop) );
+    cutilSafeCall( cudaEventElapsedTime(&tmp, compute_start, compute_stop) );
+    compute_time += tmp; 
+#endif
 
     p_d = input_itemsets_d;  
     input_itemsets_d = tmp_d;
@@ -468,10 +571,17 @@ int main( int argc, char** argv)
 
   gettimeofday( &tv2, NULL);
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
-  printf("%f\n", runtime);
+#ifdef EVENT
+  printf("Total time: %f, Copy time: %f, Compute time: %f\n", runtime, copy_time, compute_time);
+#else
+  printf("Total time: %f\n", runtime);
+#endif
 
   cudaMemcpy(input_itemsets, input_itemsets_d, sizeof(int)*max_rows*max_cols, cudaMemcpyDeviceToHost); 
-#else
+#endif
+
+#ifdef PRA
+  /* Polyhedral reuse analysis to avoid data copying */
 
   cudaMemcpy(input_itemsets_d, input_itemsets, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
   cudaMemcpy(reference_d, reference, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
@@ -481,14 +591,14 @@ int main( int argc, char** argv)
   for( i = 1; i < max_cols; i++) {
     dim3 block(BLOCK_X,BLOCK_Y);
     dim3 grid(i/BLOCK_X+1,i/BLOCK_Y+1);
-    upper_left<<<grid, block>>>( input_itemsets_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
+    upper_left_opt<<<grid, block>>>( input_itemsets_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
   }
 
 
   for( i = 1; i < max_cols-1; i++) {
     dim3 block(BLOCK_X,BLOCK_Y);
     dim3 grid((max_cols-i-1)/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
-    lower_right<<<grid, block>>>( input_itemsets_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
+    lower_right_opt<<<grid, block>>>( input_itemsets_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
   }
 
   cudaThreadSynchronize();
