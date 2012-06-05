@@ -433,6 +433,7 @@ int main( int argc, char** argv)
 
 #ifdef LAO
 
+#ifdef EVENT
   float tmp, copy_time = 0.0, compute_time = 0.0;
 
   cudaEvent_t copy_start, copy_stop, compute_start, compute_stop;
@@ -440,6 +441,10 @@ int main( int argc, char** argv)
   cutilSafeCall( cudaEventCreate(&copy_stop) );
   cutilSafeCall( cudaEventCreate(&compute_start) );
   cutilSafeCall( cudaEventCreate(&compute_stop) );
+#else
+  struct timeval copy_start, copy_stop, compute_start, compute_stop;
+  double copy_time=0.0, compute_time=0.0;
+#endif
 
   /* memopt+lao */
 
@@ -455,6 +460,8 @@ int main( int argc, char** argv)
 
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(copy_start, 0) );
+#else
+    gettimeofday( &copy_start, NULL);
 #endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
@@ -479,31 +486,39 @@ int main( int argc, char** argv)
       dim3 grid(1/BLOCK_X+1,i/BLOCK_Y+1);
       copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, 1, 0, i+1, 1);
     }
-    cudaThreadSynchronize();
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(copy_stop, 0) );
     cutilSafeCall( cudaEventSynchronize(copy_stop) );
     cutilSafeCall( cudaEventElapsedTime(&tmp, copy_start, copy_stop) );
     copy_time += tmp; 
+#else
+    cudaThreadSynchronize();
+    gettimeofday( &copy_stop, NULL);
+    copy_time += ((copy_stop.tv_sec*1000.0+ copy_stop.tv_usec/1000.0)-(copy_start.tv_sec*1000.0+ copy_start.tv_usec/1000.0));
 #endif
 
 
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(compute_start, 0) );
+#else
+    gettimeofday( &compute_start, NULL);
 #endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
       dim3 grid(i/BLOCK_X+1,i/BLOCK_Y+1);
       upper_left_copy<<<grid, block>>>( tmp_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
     }
-    cudaThreadSynchronize();
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(compute_stop, 0) );
     cutilSafeCall( cudaEventSynchronize(compute_stop) );
     cutilSafeCall( cudaEventElapsedTime(&tmp, compute_start, compute_stop) );
     compute_time += tmp; 
-#endif
-   
+#else
+    cudaThreadSynchronize();
+    gettimeofday( &compute_stop, NULL);
+    compute_time += ((compute_stop.tv_sec*1000.0+ compute_stop.tv_usec/1000.0)-(compute_start.tv_sec*1000.0+ compute_start.tv_usec/1000.0));
+#endif 
+
     p_d = input_itemsets_d;  
     input_itemsets_d = tmp_d;
     tmp_d = p_d;
@@ -513,6 +528,8 @@ int main( int argc, char** argv)
 
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(copy_start, 0) );
+#else
+    gettimeofday( &copy_start, NULL);
 #endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
@@ -537,30 +554,39 @@ int main( int argc, char** argv)
       dim3 grid((i+1)/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
       copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, i+1, 0, max_rows, i+1);
     }
-    cudaThreadSynchronize();
+
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(copy_stop, 0) );
     cutilSafeCall( cudaEventSynchronize(copy_stop) );
     cutilSafeCall( cudaEventElapsedTime(&tmp, copy_start, copy_stop) );
     copy_time += tmp; 
+#else
+    cudaThreadSynchronize();
+    gettimeofday( &copy_stop, NULL);
+    copy_time += ((copy_stop.tv_sec*1000.0+ copy_stop.tv_usec/1000.0)-(copy_start.tv_sec*1000.0+ copy_start.tv_usec/1000.0));
 #endif
 
 
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(compute_start, 0) );
+#else
+    gettimeofday( &compute_start, NULL);
 #endif
     {
       dim3 block(BLOCK_X,BLOCK_Y);
       dim3 grid((max_cols-i-1)/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
       lower_right_copy<<<grid, block>>>( tmp_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
     }
-    cudaThreadSynchronize();
 #ifdef EVENT
     cutilSafeCall( cudaEventRecord(compute_stop, 0) );
     cutilSafeCall( cudaEventSynchronize(compute_stop) );
     cutilSafeCall( cudaEventElapsedTime(&tmp, compute_start, compute_stop) );
     compute_time += tmp; 
-#endif
+#else
+    cudaThreadSynchronize();
+    gettimeofday( &compute_stop, NULL);
+    compute_time += ((compute_stop.tv_sec*1000.0+ compute_stop.tv_usec/1000.0)-(compute_start.tv_sec*1000.0+ compute_start.tv_usec/1000.0));
+#endif 
 
     p_d = input_itemsets_d;  
     input_itemsets_d = tmp_d;
@@ -571,11 +597,7 @@ int main( int argc, char** argv)
 
   gettimeofday( &tv2, NULL);
   runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
-#ifdef EVENT
   printf("Total time: %f, Copy time: %f, Compute time: %f\n", runtime, copy_time, compute_time);
-#else
-  printf("Total time: %f\n", runtime);
-#endif
 
   cudaMemcpy(input_itemsets, input_itemsets_d, sizeof(int)*max_rows*max_cols, cudaMemcpyDeviceToHost); 
 #endif

@@ -95,6 +95,19 @@ __global__ void lower_right(int *input_itemsets, int *reference, int max_rows, i
 }
 
 
+__global__ void copy(int *dst, int *input_itemsets, int max_rows, int max_cols, int lb0, int lb1, int ub0, int ub1)
+{
+   int r, c;
+  
+   r = blockIdx.y*blockDim.y+threadIdx.y+lb0; 
+   c = blockIdx.x*blockDim.x+threadIdx.x+lb1; 
+
+   if( r >= ub0 || c >= ub1) return;
+
+   int idx = r*max_cols+c; 
+   dst[idx] = input_itemsets[idx];
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //! Run a simple test for CUDA
 ////////////////////////////////////////////////////////////////////////////////
@@ -135,6 +148,110 @@ int main( int argc, char** argv)
     }
   }
 
+
+#ifdef LAO
+  /* memopt+lao */
+
+  cudaMemcpy(input_itemsets_d, input_itemsets, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
+  cudaMemcpy(reference_d, reference, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
+
+  gettimeofday( &tv1, NULL);
+  int *tmp_d, *p_d;
+
+  cudaMalloc((void**)&tmp_d, max_rows*max_cols*sizeof(int));
+
+  for( i = 1; i < max_cols; i++) {
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid(max_cols/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, i+1, 0, max_rows, max_cols);
+    }
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid(max_cols/BLOCK_X+1,1/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, 0, 0, 1, max_cols);
+    }
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid((max_cols-i-1)/BLOCK_X+1,i/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, 1, i+1, i+1, max_cols);
+    }
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid(1/BLOCK_X+1,i/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, 1, 0, i+1, 1);
+    }
+
+    {
+      //dim3 block(BLOCK_X,BLOCK_Y);
+      //dim3 grid(i/BLOCK_X+1,i/BLOCK_Y+1);
+      //upper_left_copy<<<grid, block>>>( tmp_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
+      dim3 block(BLOCK);
+      dim3 grid(i/BLOCK+1);
+      upper_left<<<grid, block>>>( tmp_d, reference_d, max_rows, max_cols, i, penalty);
+    }
+   
+    p_d = input_itemsets_d;  
+    input_itemsets_d = tmp_d;
+    tmp_d = p_d;
+  }
+
+  for( i = 1; i < max_cols-1; i++) {
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid(max_cols/BLOCK_X+1,0/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, max_rows, 0, max_rows, max_cols);
+    }
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid(max_cols/BLOCK_X+1,(i+1)/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, 0, 0, i+1, max_cols);
+    }
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid(0/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, i+1, max_cols, max_rows, max_cols);
+    }
+
+    {
+      dim3 block(BLOCK_X,BLOCK_Y);
+      dim3 grid((i+1)/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
+      copy<<<grid, block>>>( tmp_d, input_itemsets_d, max_rows, max_cols, i+1, 0, max_rows, i+1);
+    }
+
+    {
+      //dim3 block(BLOCK_X,BLOCK_Y);
+      //dim3 grid((max_cols-i-1)/BLOCK_X+1,(max_rows-i-1)/BLOCK_Y+1);
+      //lower_right_copy<<<grid, block>>>( tmp_d, input_itemsets_d, reference_d, max_rows, max_cols, i, penalty);
+      dim3 block(BLOCK);
+      dim3 grid(i/BLOCK+1);
+      lower_right<<<grid, block>>>( tmp_d, reference_d, max_rows, max_cols, i, penalty);
+    }
+
+    p_d = input_itemsets_d;  
+    input_itemsets_d = tmp_d;
+    tmp_d = p_d;
+  }
+
+  cudaThreadSynchronize();
+
+  gettimeofday( &tv2, NULL);
+  runtime = ((tv2.tv_sec*1000.0+ tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0+ tv1.tv_usec/1000.0));
+  printf("%f\n", runtime);
+
+  cudaMemcpy(input_itemsets, input_itemsets_d, sizeof(int)*max_rows*max_cols, cudaMemcpyDeviceToHost); 
+#endif
+
+
+
+#ifdef PRA 
 
   cudaMemcpy(input_itemsets_d, input_itemsets, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
   cudaMemcpy(reference_d, reference, sizeof(int)*max_rows*max_cols, cudaMemcpyHostToDevice); 
@@ -190,6 +307,8 @@ int main( int argc, char** argv)
   printf("Runtime: %f\n", runtime);
 
   cudaMemcpy(input_itemsets, input_itemsets_d, sizeof(int)*max_rows*max_cols, cudaMemcpyDeviceToHost); 
+
+#endif
 
 
 #ifdef OUTPUT 

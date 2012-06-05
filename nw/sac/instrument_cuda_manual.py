@@ -5,8 +5,7 @@ import datetime;
 import os;
 import random;
 
-#sizes = [1024, 2048, 3072, 4096]; 
-sizes = [1024,2048]; 
+sizes = [1024, 2048, 3072, 4096]; 
 
 max_measure_regions = 10;
 actual_measure_regions = 0;
