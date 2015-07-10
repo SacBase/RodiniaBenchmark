@@ -12,21 +12,12 @@ use Benchmarking: all;
 #endif
 
 #ifndef SIZE
-#define SIZE 2048
+#define SIZE 512
 #endif
 
 int main()
 {
   DBL[SIZE,SIZE] mat;
-/*
-  mat = FibreScanFloatArray();
-*/
-
-/*
-  filename = argv(1);
-  err, fd = fopen( filename, "r");
-  mat = FibreScanFloatArray( fd);
-*/
 
 #ifdef FLOAT 
   mat = FibreScanFloatArray( );

@@ -9,13 +9,13 @@ import random;
 try:
     infilename      = sys.argv[1];
     outfilename     = sys.argv[2];
-except: 
+except:
     print "Usage:", sys.argv[0]," [input file] [output file]";
     sys.exit(1);
 
 infile = open( infilename, "r");
 line = infile.readline();
-size = int( line); # the first line stores the number of nodes 
+size = int( line); # the first line stores the number of nodes
 
 outfile = open( outfilename, "w");
 
