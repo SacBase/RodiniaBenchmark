@@ -3,6 +3,8 @@ use Array: all;
 use CommandLine: all;
 use Benchmarking: all; 
 
+#define FLOAT
+
 #ifdef FLOAT 
 #define DBL float
 #define TOD tof
@@ -12,19 +14,11 @@ use Benchmarking: all;
 #endif
 
 #ifndef SIZE
-#define SIZE 512
+#define SIZE 1024
 #endif
 
-int main()
+DBL[.,.] compute(DBL[.,.] mat)
 {
-  DBL[SIZE,SIZE] mat;
-
-#ifdef FLOAT 
-  mat = FibreScanFloatArray( );
-#else 
-  mat = FibreScanDoubleArray( );
-#endif
-
 #ifdef C_IMP /* C implementation */
 
   for( i = 0; i < SIZE; i++) {
@@ -71,9 +65,6 @@ int main()
   }
 #else /* SAC implementation 2 */
 
-  interval0 = getInterval( "LUD", 0 );
-  start( interval0 );
-
   for( i = 0; i < SIZE-1; i++) {
 
     /* Compute column */
@@ -90,15 +81,34 @@ int main()
           }:modarray(mat);
   }
 
-  end( interval0 );
+#endif
+  return( mat);
+}
 
+int main()
+{
+  DBL[SIZE,SIZE] mat;
+
+#ifdef FLOAT 
+  mat = FibreScanFloatArray( );
+#else 
+  mat = FibreScanDoubleArray( );
 #endif
 
+  interval0 = getInterval( "LUD", 0, 3);
+  start( interval0 );
+  mat = compute(mat);
+  end( interval0 );
+
+  time, unit = returnResultUnit(interval0);
+  printf(" %.3f %s", time, unit);
+
 #ifdef OUTPUT
-  print(mat);
+  FibrePrint(mat);
+  //print(mat);
   return( 0);
 #else
-  return( toi(mat[0,0]));
+  return( toi(sum(mat)));
 #endif
 }
 

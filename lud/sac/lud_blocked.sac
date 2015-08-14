@@ -87,6 +87,6 @@ int main()
   printf("[0 0]:%f\n", mat[0,0]);
 #endif
 
-  return( 0);
+  return( toi(sum(mat)));
 }
 

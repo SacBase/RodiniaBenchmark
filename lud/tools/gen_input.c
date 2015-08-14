@@ -35,7 +35,8 @@ int main (int argc, char **argv){
         return 1;
     }
 
-    srand(time(NULL));
+    //srand(time(NULL));
+    srand(7);
 
     sprintf(L_FNAME, "l-%d.dat", MatrixDim);
     fl = fopen(L_FNAME, "wb");
