@@ -1,26 +1,25 @@
-OUTPUT = -DOUTPUT
-
-SAC2CFLAGS = -O3
+SAC2C = sac2c_d
+SAC2CFLAGS = -O3 -v2 -DOUTPUT
 
 all: hotspot_sac_seq hotspot_sac_cuda
 
 hotspot_sac_seq: hotspot.sac
-	sac2c $(SAC2CFLAGS) hotspot.sac -o hotspot_sac_seq
+	$(SAC2C) $(SAC2CFLAGS) -o $@ $<
 
 hotspot_sac_mt: hotspot.sac
-	sac2c -mt $(SAC2CFLAGS) hotspot.sac -o hotspot_sac_mt
+	$(SAC2C) -t mt_pth $(SAC2CFLAGS) -o $@ $<
 
 hotspot_sac_cuda: hotspot.sac
-	sac2c -t cuda $(SAC2CFLAGS) hotspot.sac -o hotspot_sac_cuda
+	$(SAC2C) -t cuda $(SAC2CFLAGS) -o $@ $<
 
 hotspot_sac_seq_out: hotspot.sac
-	sac2c $(OUTPUT) $(SAC2CFLAGS) hotspot.sac -o hotspot_sac_seq_out
+	$(SAC2C) $(SAC2CFLAGS) -o $@ $<
 
 hotspot_sac_mt_out: hotspot.sac
-	sac2c -mt $(OUTPUT) $(SAC2CFLAGS) hotspot.sac -o hotspot_sac_mt_out
+	$(SAC2C) -t mt_pth $(SAC2CFLAGS) -o $@ $<
 
 hotspot_sac_cuda_out: hotspot.sac
-	sac2c $(OUTPUT) -t cuda $(SAC2CFLAGS) hotspot.sac -o hotspot_sac_cuda_out
+	$(SAC2C) -t cuda $(SAC2CFLAGS) -o $@ $<
 
 check: hotspot_sac_cuda_out hotspot_sac_seq_out
 	./hotspot_sac_cuda_out >res_cuda

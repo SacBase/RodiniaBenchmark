@@ -73,7 +73,7 @@ int runTest( )
     [-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1]
   ];
 	
-  srandom( 7);  
+  srandom( toui(7) );  
 /*
   input_itemsets = genarray( [max_rows, max_cols], 0); 
   for( i=1; i< max_rows ; i++) {     

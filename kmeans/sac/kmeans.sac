@@ -55,29 +55,29 @@ DBL id( DBL x)
   return( x);
 }
 
-int main() 
+int main()
 {
 #if 0
   DBL[NFEATURES, SIZE] features_gpu;
 
 #ifdef FLOAT
-  features_gpu = FibreScanFloatArray(); 
+  features_gpu = FibreScanFloatArray();
 #else
-  features_gpu = FibreScanDoubleArray(); 
+  features_gpu = FibreScanDoubleArray();
 #endif
 
   /* Transpose features_gpu so that access to the
    * array on host can be more efficient */
   features_cpu = genarray( [SIZE, NFEATURES], TOD(0.0));
-  for( i = 0; i < SIZE; i++) { 
+  for( i = 0; i < SIZE; i++) {
     for( j = 0; j < NFEATURES; j++) {
       features_cpu[i,j] = features_gpu[j,i];
     }
-  }    
+  }
 #endif
 
 
-  srandom(7);
+  srandom( toui(7));
 
   features_cpu = with {
                    /* (. <= iv=[i,j] <= .) : id(TOD( rand()%100)/TOD(100.0)); */
@@ -115,7 +115,7 @@ int main()
   }
 #endif
 
-  srandom(2012);
+  srandom( toui(2012));
 
   clusters = genarray([NCLUSTERS, NFEATURES], TOD(0.0));
   /* randomly pick cluster centers */
@@ -131,7 +131,7 @@ int main()
 */
 
   /* Store how many members are there in each cluster */
-  new_centers_len = genarray([NCLUSTERS], 0); 
+  new_centers_len = genarray([NCLUSTERS], 0);
   /* The actual centers */
   new_centers = genarray([NCLUSTERS, NFEATURES], TOD(0.0));
 
@@ -140,7 +140,7 @@ int main()
   membership_new = genarray([SIZE], -1);
 
   interval0 = getInterval( "KMEANS", 0 );
-  start( interval0 ); 
+  start( interval0 );
 
   c = 0;
   loop = -1;
@@ -174,7 +174,7 @@ int main()
                    ( [0] <= iv=[k] < [SIZE]) {
                      res = TOD(abs(membership_new[k] - membership[k]));
                    }:res;
-                 }:fold(+, TOD(0.0)); 
+                 }:fold(+, TOD(0.0));
 
 
     for (i = 0; i < SIZE; i++) {		
@@ -183,7 +183,7 @@ int main()
       for (j = 0; j < NFEATURES; j++) {			
         new_centers[cluster_id, j] = new_centers[cluster_id, j] + features_cpu[i, j];
       }
-    } 
+    }
 
     membership = membership_new;
 #else
@@ -200,7 +200,7 @@ int main()
       for (j = 0; j < NFEATURES; j++) {			
         new_centers[cluster_id, j] = new_centers[cluster_id, j] + features_cpu[i, j];
       }
-    } 
+    }
 #endif
 
     /* Compute new centers */
@@ -212,10 +212,10 @@ int main()
 	new_centers[i, j] = TOD(0.0);  /* set back to 0 */
       }
       new_centers_len[i] = 0;  /* set back to 0 */
-    }	 
+    }
 
     c = c + 1;  /* Count the number of actual loops */
-    loop = loop + 1; 
+    loop = loop + 1;
   } while ( ( delta > THRESHOLD) && ( loop < ITER));
 
   end( interval0 );
@@ -233,6 +233,6 @@ int main()
   return( 0);
 #else
   return(toi(clusters[0,0]));
-#endif 
+#endif
 }
 

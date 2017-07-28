@@ -10,7 +10,7 @@ use Math:  all;
 #define TOD tod
 #endif
 
-#define SIZE 193474
+#define SIZE 64
 
 #ifndef ITER
 #define ITER 1000 

@@ -10,7 +10,7 @@ use Array: all;
 #endif
 
 #ifndef SIZE
-#define SIZE 512
+#define SIZE 64
 #endif
 
 int main()

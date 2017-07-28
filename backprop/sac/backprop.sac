@@ -16,9 +16,9 @@ use Math: all;
 #define DBL float
 #define TOD tof
 #else
-#define DBL double 
+#define DBL double
 #define TOD tod
-#endif 
+#endif
 
 #define IN     65536
 #define HIDDEN 16
@@ -32,8 +32,8 @@ use Math: all;
 
 #define RAND_MAX 2147483647
 
-#define ETA      TOD(0.3)       
-#define MOMENTUM TOD(0.3)  
+#define ETA      TOD(0.3)
+#define MOMENTUM TOD(0.3)
 
 #define ABS(x) (((x) > TOD(0.0)) ? (x) : (-(x)))
 
@@ -112,7 +112,7 @@ DBL[.], DBL[.] bpnn_layerforward_large(DBL[.] l1, DBL[.] l2, DBL[.,.] conn)
   n2 = shape(l2)[0]-1;
 
 /*
-  l1[0] = TOD(1.0); 
+  l1[0] = TOD(1.0);
 */
 
   tmp = with {
@@ -120,9 +120,9 @@ DBL[.], DBL[.] bpnn_layerforward_large(DBL[.] l1, DBL[.] l2, DBL[.,.] conn)
             res = conn[k]*l1[k];
           }:res;
         }:fold(+, genarray([n2+1],TOD(0.0)));
- 
+
   l2 = with {
-          ([0] <= iv < shape(tmp)):(TOD(1.0) / (TOD(1.0) + exp(-tmp[iv]))); 
+          ([0] <= iv < shape(tmp)):(TOD(1.0) / (TOD(1.0) + exp(-tmp[iv])));
         }:modarray(tmp);
 
   return( l1, l2);
@@ -134,24 +134,24 @@ DBL[.], DBL[.] bpnn_layerforward_small(DBL[.] l1, DBL[.] l2, DBL[.,.] conn)
   n1 = shape(l1)[0]-1;
   n2 = shape(l2)[0]-1;
 /*
-  l1[0] = TOD(1.0); 
+  l1[0] = TOD(1.0);
 */
   l2 = with {
          ( [1] <= iv=[j] < [n2+1]) {
            tmp = with {
                    ( [0] <= iv=[k] < [n1+1]):conn[k, j]*l1[k];
                  }:fold(+, TOD(0.0));
-           res = (TOD(1.0) / (TOD(1.0) + exp(-tmp))); 
+           res = (TOD(1.0) / (TOD(1.0) + exp(-tmp)));
          }:res;
-       }:modarray(l2); 
+       }:modarray(l2);
 
   return( l1, l2);
 }
 
 inline
-DBL, DBL[.] bpnn_output_error_sequential(DBL[.] delta, DBL[.] target, DBL[.] output)  
+DBL, DBL[.] bpnn_output_error_sequential(DBL[.] delta, DBL[.] target, DBL[.] output)
 {
-  nj = shape(delta)[0]-1; 
+  nj = shape(delta)[0]-1;
 
   errsum = TOD(0.0);
   for (j = 1; j <= nj; j++) {
@@ -165,12 +165,12 @@ DBL, DBL[.] bpnn_output_error_sequential(DBL[.] delta, DBL[.] target, DBL[.] out
 }
 
 inline
-DBL, DBL[.] bpnn_output_error(DBL[.] delta, DBL[.] target, DBL[.] output)  
+DBL, DBL[.] bpnn_output_error(DBL[.] delta, DBL[.] target, DBL[.] output)
 {
-  nj = shape(delta)[0]-1; 
+  nj = shape(delta)[0]-1;
 
 #ifdef ERRSUM
-  errsum, delta = 
+  errsum, delta =
     with {
       ( [1] <= iv=[j] < [nj+1]) {
         o = output[j];
@@ -178,7 +178,7 @@ DBL, DBL[.] bpnn_output_error(DBL[.] delta, DBL[.] target, DBL[.] output)
         res2 = o * (TOD(1.0) - o) * (t - o);
         res1 = ABS( res2);
       }:(res1, res2);
-    }:(fold(+,TOD(0.0)), modarray(delta));   
+    }:(fold(+,TOD(0.0)), modarray(delta));
 #else
   delta = with {
     ( [1] <= iv=[j] < [nj+1]) {
@@ -186,7 +186,7 @@ DBL, DBL[.] bpnn_output_error(DBL[.] delta, DBL[.] target, DBL[.] output)
       t = target[j];
       res = o * (TOD(1.0) - o) * (t - o);
     }:res;
-  }:modarray(delta); 
+  }:modarray(delta);
   errsum = TOD(0.0);
 #endif /* End of ERRSUM*/
 
@@ -196,8 +196,8 @@ DBL, DBL[.] bpnn_output_error(DBL[.] delta, DBL[.] target, DBL[.] output)
 inline
 DBL, DBL[.] bpnn_hidden_error_sequential(DBL[.] delta_h, DBL[.] delta_o, DBL[.,.] who, DBL[.] hidden)
 {
-  nh = shape(delta_h)[0]-1; 
-  no = shape(delta_o)[0]-1; 
+  nh = shape(delta_h)[0]-1;
+  no = shape(delta_o)[0]-1;
 
   errsum = TOD(0.0);
   for (j = 1; j <= nh; j++) {
@@ -216,11 +216,11 @@ DBL, DBL[.] bpnn_hidden_error_sequential(DBL[.] delta_h, DBL[.] delta_o, DBL[.,.
 inline
 DBL, DBL[.] bpnn_hidden_error(DBL[.] delta_h, DBL[.] delta_o, DBL[.,.] who, DBL[.] hidden)
 {
-  nh = shape(delta_h)[0]-1; 
-  no = shape(delta_o)[0]-1; 
+  nh = shape(delta_h)[0]-1;
+  no = shape(delta_o)[0]-1;
 
 #ifdef ERRSUM
-  errsum, delta_h = 
+  errsum, delta_h =
     with {
       ( [1] <= iv=[j] <= [nh] ) {
         h = hidden[j];
@@ -229,9 +229,9 @@ DBL, DBL[.] bpnn_hidden_error(DBL[.] delta_h, DBL[.] delta_o, DBL[.,.] who, DBL[
                   res = delta_o[k] * who[j,k];
                 }:res;
               }:fold(+, TOD(0.0));
-        res2 = h * (TOD(1.0) - h) * tmp; 
+        res2 = h * (TOD(1.0) - h) * tmp;
         res1 = ABS(res2);
-      }:(res1, res2);      
+      }:(res1, res2);
     }:(fold(+,TOD(0.0)), modarray(delta_h));
 #else
   delta_h = with {
@@ -242,8 +242,8 @@ DBL, DBL[.] bpnn_hidden_error(DBL[.] delta_h, DBL[.] delta_o, DBL[.,.] who, DBL[
                 res = delta_o[k] * who[j,k];
               }:res;
             }:fold(+, TOD(0.0));
-      res = h * (TOD(1.0) - h) * tmp; 
-    }:res;      
+      res = h * (TOD(1.0) - h) * tmp;
+    }:res;
   }:modarray(delta_h);
   errsum = TOD(0.0);
 #endif /* End of ERRSUM*/
@@ -307,7 +307,7 @@ int main()
   input_prev_weights = genarray( [IN+1, HIDDEN+1], TOD(0.0));
   hidden_prev_weights = genarray( [HIDDEN+1, OUT+1], TOD(0.0));
 
-  srandom( 7);  
+  srandom( toui(7));
 
   input_weights = bpnn_randomize_weights(input_weights);
   hidden_weights = bpnn_randomize_weights(hidden_weights);
@@ -328,12 +328,12 @@ int main()
 
     out_err, output_delta = bpnn_output_error_sequential(output_delta, target, output_units);
 
-    hid_err, hidden_delta = bpnn_hidden_error_sequential(hidden_delta, output_delta, hidden_weights, hidden_units); 
+    hid_err, hidden_delta = bpnn_hidden_error_sequential(hidden_delta, output_delta, hidden_weights, hidden_units);
 
-    hidden_units, hidden_weights, hidden_prev_weights = 
+    hidden_units, hidden_weights, hidden_prev_weights =
       bpnn_adjust_weights_sequential(output_delta, hidden_units, hidden_weights, hidden_prev_weights);
 
-    input_units, input_weights, input_prev_weights = 
+    input_units, input_weights, input_prev_weights =
       bpnn_adjust_weights(hidden_delta, input_units, input_weights, input_prev_weights);
 
 #else  /* Compile for sequential */
@@ -344,12 +344,12 @@ int main()
 
     out_err, output_delta = bpnn_output_error(output_delta, target, output_units);
 
-    hid_err, hidden_delta = bpnn_hidden_error(hidden_delta, output_delta, hidden_weights, hidden_units); 
+    hid_err, hidden_delta = bpnn_hidden_error(hidden_delta, output_delta, hidden_weights, hidden_units);
 
-    hidden_units, hidden_weights, hidden_prev_weights = 
+    hidden_units, hidden_weights, hidden_prev_weights =
       bpnn_adjust_weights(output_delta, hidden_units, hidden_weights, hidden_prev_weights);
 
-    input_units, input_weights, input_prev_weights = 
+    input_units, input_weights, input_prev_weights =
       bpnn_adjust_weights(hidden_delta, input_units, input_weights, input_prev_weights);
 #endif
 

@@ -1,0 +1,2 @@
+
+Compiles fine with both seq and cuda, but in seq case results are NANs...cuda works fine seemingly.

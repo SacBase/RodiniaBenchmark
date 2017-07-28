@@ -33,29 +33,29 @@ use Benchmarking: all;
 
 DBL[ROWS, COLS] random_matrix()
 {
-  srandom(7);
+  srandom( toui(7));
 
   I = genarray([ROWS, COLS], TOD(0.0));
   J = genarray([ROWS, COLS], TOD(0.0));
 
   for( i = 0 ; i < ROWS ; i++){
     for ( j = 0 ; j < COLS ; j++){
-      I[i,j] = TOD( rand())/TOD(2147483647); 
+      I[i,j] = TOD( rand())/TOD(2147483647);
     }
   }
 
   for( i = 0 ; i < ROWS ; i++){
     for ( j = 0 ; j < COLS ; j++){
-      J[i, j] = exp(I[i,j]); 
+      J[i, j] = exp(I[i,j]);
     }
   }
 
-  return( J); 
+  return( J);
 }
 
 int main()
-{   
-  size_R = (R2-R1+1)*(C2-C1+1);   
+{
+  size_R = (R2-R1+1)*(C2-C1+1);
 
   /* Input Matrix */
   J = random_matrix();
@@ -63,12 +63,12 @@ int main()
   c = genarray([ROWS, COLS], TOD(0.0));
 
   interval0 = getInterval( "SRAD", 0 );
-  start( interval0 ); 
+  start( interval0 );
 
   for( iter=0; iter< ITER; iter++) {
 
 #ifdef C_FOLD
-    sum1=TOD(0.0); 
+    sum1=TOD(0.0);
     sum2=TOD(0.0);
 
     for (i=R1; i<=R2; i++) {
@@ -85,7 +85,7 @@ int main()
           res1 = J[i,j];
           res2 = res1*res1;
         }:(res1, res2);
-      }:( fold(+, TOD(0.0)), 
+      }:( fold(+, TOD(0.0)),
           fold(+, TOD(0.0)));
 #endif
 
@@ -141,7 +141,7 @@ int main()
            }:res;
          }:genarray([ROWS, COLS], TOD(0.0));
 
-    c = with { 
+    c = with {
           ( [0, 0] <= iv=[i,j] < [ROWS, COLS]) {
             Jc = J[iv];
             G2 = (dN[iv]*dN[iv] + dS[iv]*dS[iv] + dW[iv]*dW[iv] + dE[iv]*dE[iv]) / (Jc*Jc);
@@ -152,7 +152,7 @@ int main()
             qsqr = num/(den*den);
             den = (qsqr-q0sqr) / (q0sqr * (TOD(1.0)+q0sqr)) ;
             res = TOD(1.0) / (TOD(1.0)+den) ;
-              
+
             if( res < TOD(0.0)) {
               res = TOD(0.0);
             }
@@ -162,7 +162,7 @@ int main()
           }:res;
         }:modarray(c);
 
-    J = with { 
+    J = with {
           ( [0, 0] <= iv=[i,j] < [ROWS, COLS]) {
             cN = c[iv];
             cW = c[iv];
@@ -179,10 +179,10 @@ int main()
               cE = c[i,j+1];
             }
             D = cN * dN[iv] + cS * dS[iv] + cW * dW[iv] + cE * dE[iv];
-                
+
             res = J[iv] + TOD(0.25)*TOD(LAMBDA)*D;
           }:res;
-        }:modarray(J);      
+        }:modarray(J);
   }
 
   end( interval0 );

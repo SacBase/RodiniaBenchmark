@@ -14,7 +14,7 @@ use Benchmarking: all;
 #endif
 
 #ifndef SIZE
-#define SIZE 1024
+#define SIZE 64
 #endif
 
 DBL[.,.] compute(DBL[.,.] mat)
