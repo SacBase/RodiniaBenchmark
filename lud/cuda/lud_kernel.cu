@@ -2,10 +2,19 @@
 #include <stdio.h>
 #include <sys/time.h>
 
-#define BLOCK_SIZE 16
+#ifdef RD_WG_SIZE_0_0
+        #define BLOCK_SIZE RD_WG_SIZE_0_0
+#elif defined(RD_WG_SIZE_0)
+        #define BLOCK_SIZE RD_WG_SIZE_0
+#elif defined(RD_WG_SIZE)
+        #define BLOCK_SIZE RD_WG_SIZE
+#else
+        #define BLOCK_SIZE 16
+#endif
 
 
-__global__ void lud_diagonal(float *m, int matrix_dim, int offset)
+__global__ void
+lud_diagonal(float *m, int matrix_dim, int offset)
 {
   int i,j;
   __shared__ float shadow[BLOCK_SIZE][BLOCK_SIZE];
@@ -19,8 +28,8 @@ __global__ void lud_diagonal(float *m, int matrix_dim, int offset)
     array_offset += matrix_dim;
   }
   __syncthreads();
-
   for(i = 0; i < BLOCK_SIZE-1; i++) {
+
     if ( threadIdx.x > i) { /* starts at 15 threads and then decrease one thread each time */
       for(j = 0; j < i; j++) { /* This for loop computes cols */
         shadow[threadIdx.x][i] -= shadow[threadIdx.x][j]*shadow[j][i];
@@ -28,7 +37,6 @@ __global__ void lud_diagonal(float *m, int matrix_dim, int offset)
       shadow[threadIdx.x][i] /= shadow[i][i];
     }
     __syncthreads();
-
     if ( threadIdx.x > i) {
       for( j = 0; j < i+1; j++) { /* This for loop computes rows */
         shadow[i+1][threadIdx.x] -= shadow[i+1][j]*shadow[j][threadIdx.x];
@@ -47,7 +55,8 @@ __global__ void lud_diagonal(float *m, int matrix_dim, int offset)
   }
 }
 
-__global__ void lud_diagonal_noshr(float *m, int matrix_dim, int offset)
+__global__ void
+lud_diagonal_noshr(float *m, int matrix_dim, int offset)
 {
   int i,j;
 
@@ -75,7 +84,8 @@ __global__ void lud_diagonal_noshr(float *m, int matrix_dim, int offset)
   }
 }
 
-__global__ void lud_perimeter(float *m, int matrix_dim, int offset)
+__global__ void
+lud_perimeter(float *m, int matrix_dim, int offset)
 {
   __shared__ float dia[BLOCK_SIZE][BLOCK_SIZE];
   __shared__ float peri_row[BLOCK_SIZE][BLOCK_SIZE];
@@ -212,7 +222,8 @@ __global__ void lud_perimeter_noshr(float *m, int matrix_dim, int offset)
   }
 }
 
-__global__ void lud_internal(float *m, int matrix_dim, int offset)
+__global__ void
+lud_internal(float *m, int matrix_dim, int offset)
 {
   __shared__ float peri_row[BLOCK_SIZE][BLOCK_SIZE];
   __shared__ float peri_col[BLOCK_SIZE][BLOCK_SIZE];
@@ -235,7 +246,8 @@ __global__ void lud_internal(float *m, int matrix_dim, int offset)
   m[(global_row_id+threadIdx.y)*matrix_dim+global_col_id+threadIdx.x] -= sum;
 }
 
-__global__ void lud_internal_noshr(float *m, int matrix_dim, int offset)
+__global__ void
+lud_internal_noshr(float *m, int matrix_dim, int offset)
 {
   int i;
   float sum;
@@ -269,9 +281,9 @@ void lud_cuda(float *m, int matrix_dim, int do_shared)
     }
     lud_diagonal<<<1,BLOCK_SIZE>>>(m, matrix_dim, i);
   }
-  else { 
+  else {
     //printf("Executing kernels without shared memory!\n");
-    
+
     cudaFuncSetCacheConfig("lud_diagonal_noshr", cudaFuncCachePreferL1);
     cudaFuncSetCacheConfig("lud_perimeter_noshr", cudaFuncCachePreferL1);
     cudaFuncSetCacheConfig("lud_internal_noshr", cudaFuncCachePreferL1);
