@@ -1,8 +1,8 @@
 use StdIO: all;
 use Array: all;
 use Math:  all;
-use Rand: all except{srandom};
-use Random: {srandom};
+use Constants: {randmax};
+use Random: all;
 use Benchmarking: all;
 
 #ifdef FLOAT
@@ -40,7 +40,7 @@ DBL[ROWS, COLS] random_matrix()
 
   for( i = 0 ; i < ROWS ; i++){
     for ( j = 0 ; j < COLS ; j++){
-      I[i,j] = TOD( rand())/TOD(2147483647);
+      I[i,j] = TOD( random())/TOD(randmax());
     }
   }
 

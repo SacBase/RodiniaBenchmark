@@ -1,11 +1,11 @@
 
 #include ../../../common/make.config
 
-CUDA_LIB_DIR = /usr/local/cuda/lib
+CUDA_LIB_DIR = /opt/cuda/lib
 
 #CUDA compiler
 NVCC := nvcc
-NVCC_FLAGS = -arch=sm_20 -I$(CUTIL)
+NVCC_FLAGS = -arch=sm_50 -I$(CUTIL)
 
 # 'make dbg=1' enables NVCC debugging
 ifeq ($(dbg),1)
@@ -25,13 +25,13 @@ ifeq ($(out),1)
 endif
 
 # without utilizing shared memory
-noshr:  
+noshr:
 	$(NVCC) $(NVCC_FLAGS) -DNOSHR srad.cu -o noshr_srad -L$(CUDA_LIB_DIR) -lcuda -lcudart -lm
 
 # with utilizing shared memory
-shr:  
+shr:
 	$(NVCC) $(NVCC_FLAGS) srad.cu -o shr_srad -L$(CUDA_LIB_DIR) -lcuda -lcudart -lm
 
 # delete all object files
 clean:
-	rm *.o noshr_srad shr_srad
+	$(RM) *.o noshr_srad shr_srad
