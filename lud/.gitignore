@@ -1,0 +1,4 @@
+# these ignores are specific to this sub-directory
+*_out
+*_out.c*
+*.o
