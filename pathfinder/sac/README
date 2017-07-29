@@ -1,0 +1,10 @@
+Interesting Note
+================
+
+ * This code, when compiled with `-doPRA`, causes the compiler to
+   crash in `opt:wrci`.
+ * Additionally, with `-doEXPAR` when using CUDA*, the compiler has an assertion fail:
+```
+Internal compiler error
+Assertion "NODE_TYPE( decl) == N_arg" failed at sac2c/src/libsac2c/cuda/adjust_stknl_rets.c:507 -- Declaration of avis is not N_arg!
+```

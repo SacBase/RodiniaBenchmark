@@ -1,7 +1,6 @@
 use StdIO: all;
 use Array: all;
-use Rand: all except{srandom};
-use Random: {srandom};
+use Rand: all;
 use Benchmarking: all;
 
 
@@ -10,9 +9,9 @@ use Benchmarking: all;
 #define SIZE 2048000
 #endif
 
-#ifndef ITER 
-//#define ITER 100 
-#define ITER 500 
+#ifndef ITER
+//#define ITER 100
+#define ITER 500
 #endif
 
 //#define CONDI
@@ -26,20 +25,20 @@ int[.] compute(int[.,.] wall, int[] rows, int[] cols)
   for (t = 0; t < rows-1; t++) {
     result = with {
 #ifndef CONDI
-	  ([0] <= iv=[n] < [cols]) {
+      ([0] <= iv=[n] < [cols]) {
         m = result[n];
         if (n > 0) {
-		  m = min(m, result[n-1]);
-	    }
-	    if (n < cols-1) {
-		  m = min(m, result[n+1]);
-	    }
-	    res = wall[t+1, n] + m;
-	  } : res;
+          m = min(m, result[n-1]);
+        }
+        if (n < cols-1) {
+          m = min(m, result[n+1]);
+        }
+        res = wall[t+1, n] + m;
+      } : res;
 #else
       ([0] <= iv=[n] < [1]) {
         m = result[n];
-		m = min(m, result[n+1]);
+        m = min(m, result[n+1]);
         res = wall[t+1, n] + m;
       } : res;
       ([0] < iv=[n] < [cols-1]) {
@@ -50,11 +49,11 @@ int[.] compute(int[.,.] wall, int[] rows, int[] cols)
       } : res;
       ([cols-1] <= iv=[n] < [cols]) {
         m = result[n];
-		m = min(m, result[n-1]);
+        m = min(m, result[n-1]);
         res = wall[t+1, n] + m;
       } : res;
 #endif
-	} : modarray(result); 
+    } : modarray(result);
   }
 
   return( result);
@@ -73,31 +72,29 @@ int main()
   rows = ITER;
   cols = SIZE;
 
-  srandom(toui(7));  
+  srandom(toui(7));
 
-  //wall = genarray([rows,cols], 0); 
-  //result = genarray([cols], 0); 
+  //wall = genarray([rows,cols], 0);
+  //result = genarray([cols], 0);
 
   wall = with {
-           ([0,0] <= iv < [rows, cols]) : id( rand()%10);
-         }:genarray([rows,cols], 0);
+    ([0,0] <= iv < [rows, cols]) : id( rand()%10);
+  }:genarray([rows,cols], 0);
 
-  interval0 = getInterval( "PF", 0, 3);
-  start( interval0 ); 
+  interval0 = getInterval( "PF", 0, 1);
+  start( interval0 );
 
   result = compute( wall, rows, cols);
 
-  end( interval0 ); 
+  end( interval0 );
 
-#ifdef OUTPUT 
+#ifdef OUTPUT
   print( result);
 #else
-  //printResult( interval0);
-  //printf("%d\n", result[0]);
   time, unit = returnResultUnit(interval0);
   printf(" %.3f %s", time, unit);
 #endif
 
-  return( sum(result));
+  return( result[0]);
 }
 
