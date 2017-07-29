@@ -1,1 +1,4 @@
 Both varients (normal and blocked) compile and run, however the blocked cases seems to run indefinitely.
+
+FibreRead/Output doesn't work with the CUDA transfer mechanisms, so have reverted to generating the data
+on the fly.

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 import sys;
 import time;
 import datetime;
@@ -11,7 +11,7 @@ try:
     nth_goto  = sys.argv[2];
     nth_while = sys.argv[3];
     compute_kernel_time = sys.argv[4];
-except: 
+except:
     print "Usage:", sys.argv[0]," [program] [nth goto?(starting from 1)] [nth while?(starting from 1)] [compute kernel time?(1 yes; 0 no)]";
     sys.exit(1);
 
@@ -21,7 +21,7 @@ compute_kernel_time = int(compute_kernel_time);
 
 num_of_kernels = 0;
 runs = 2;
-kernel_names = [];  
+kernel_names = [];
 
 sac_out_exe = "sac_out";
 sac_out_src = "sac_out.c";
@@ -46,11 +46,11 @@ def instrument_loop( source="", time_kernel=0, kernel_count=0, prob_size=0):
     _goto = 1;
     _while = 1;
     kernel = 0;
-    infile = open( source, "r");  
+    infile = open( source, "r");
     outfile = open( tmp_file, "w");
     for line in infile:
         if line.find("sac.h") != -1:
-            outfile.write("#include <sys/time.h>\n");  
+            outfile.write("#include <sys/time.h>\n");
             outfile.write(line);
         elif line.find("SAC_ND_GOTO") != -1:
             if _goto == nth_goto:
@@ -62,10 +62,10 @@ def instrument_loop( source="", time_kernel=0, kernel_count=0, prob_size=0):
                         outfile.write("kernel_" + `i` + "_time=0.0");
                         if i != kernel_count-1:
                             outfile.write(",");
-                        i = i + 1; 
+                        i = i + 1;
                     outfile.write(";\n");
                 else:
-                   outfile.write("struct timeval loop_start, loop_end;\n");  
+                   outfile.write("struct timeval loop_start, loop_end;\n");
                    outfile.write("gettimeofday( &loop_start, NULL);\n");
 
             outfile.write(line);
@@ -77,35 +77,35 @@ def instrument_loop( source="", time_kernel=0, kernel_count=0, prob_size=0):
                     i = 0;
                     while i < kernel_count:
                         outfile.write("printf(\"%f\\n\", kernel_" + `i` + "_time);\n");
-                        i = i + 1; 
+                        i = i + 1;
                 else:
                     outfile.write("gettimeofday( &loop_end, NULL);\n");
                     outfile.write("double runtime = ((loop_end.tv_sec*1000.0 + loop_end.tv_usec/1000.0)-(loop_start.tv_sec*1000.0 + loop_start.tv_usec/1000.0));\n");
-                    outfile.write("printf(\"%f\\n\", runtime);\n");              
+                    outfile.write("printf(\"%f\\n\", runtime);\n");
             _while = _while + 1;
         elif line.find("<<<") != -1:
             if time_kernel == 1:
-                outfile.write("struct timeval kernel_start, kernel_end;\n");  
-                outfile.write("gettimeofday( &kernel_start, NULL);\n");  
+                outfile.write("struct timeval kernel_start, kernel_end;\n");
+                outfile.write("gettimeofday( &kernel_start, NULL);\n");
                 outfile.write(line);
-                outfile.write("cudaThreadSynchronize();\n");  
-                outfile.write("gettimeofday( &kernel_end, NULL);\n");  
+                outfile.write("cudaThreadSynchronize();\n");
+                outfile.write("gettimeofday( &kernel_end, NULL);\n");
                 outfile.write("kernel_" + `kernel` + "_time += ((kernel_end.tv_sec*1000.0 + kernel_end.tv_usec/1000.0)-(kernel_start.tv_sec*1000.0 + kernel_start.tv_usec/1000.0));\n");
             else:
                 outfile.write(line);
-          
+
             kernel = kernel + 1;
         else:
             outfile.write(line);
 
     infile.close();
     outfile.close();
- 
-    os.system("mv " + tmp_file + " " + source);             
+
+    os.system("mv " + tmp_file + " " + source);
 
 def count_kernels( source=""):
     kernel_count = 0;
-    infile = open( source, "r");  
+    infile = open( source, "r");
     for line in infile:
         if line.find("<<<") != -1:
             kernel_count = kernel_count + 1;
@@ -118,25 +118,25 @@ def compute_loop_average( size, src, dst):
     outfile = open( dst, "a");
     time = 0.0;
     for line in infile:
-        time = time + float(line); 
+        time = time + float(line);
     avg_time = time/runs;
-    outfile.write( `size` + " " + `avg_time` + "\n"); 
+    outfile.write( `size` + " " + `avg_time` + "\n");
     infile.close();
     outfile.close();
 
 def compute_kernel_average( size, src, dst):
     infile = open( src, "r");
     outfile = open( dst, "a");
-  
+
     times = [];
 
     i = 0;
     while i < runs:
         j = 0;
         while j < num_of_kernels:
-            line = infile.readline(); 
+            line = infile.readline();
             if i == 0:
-                times.append(float(line)); 
+                times.append(float(line));
             else:
                 times[j] = times[j] + float(line);
             j = j + 1;
@@ -145,7 +145,7 @@ def compute_kernel_average( size, src, dst):
     i = 0;
     while i < num_of_kernels:
         times[i] = times[i]/runs;
-        outfile.write( `size` + " " + kernel_names[i] + " " +  `times[i]` + "\n"); 
+        outfile.write( `size` + " " + kernel_names[i] + " " +  `times[i]` + "\n");
         i = i + 1;
 
     infile.close();
@@ -156,7 +156,7 @@ i = 0;
 while i < len(sizes):
     cmd = "sac2c -t cuda -v0 -O3 -norip -norwo -doexpar -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
     print cmd;
-    os.system(cmd); 
+    os.system(cmd);
 
     if i == 0:
         num_of_kernels = count_kernels( cuda_out_src);
@@ -166,7 +166,7 @@ while i < len(sizes):
 
     #recompile after instrumentation
     os.system( cuda_out_sac2c);
- 
+
     #cleanup
     os.system("rm " + tmp_file);
 
@@ -181,14 +181,14 @@ while i < len(sizes):
     if compute_kernel_time == 1:
 	cmd = "sac2c -t cuda -v0 -O3 -norip -norwo -doexpar -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
 	print cmd;
-	os.system(cmd); 
+	os.system(cmd);
 
 	#instrument compiler generated code
 	instrument_loop( cuda_out_src, 1, num_of_kernels, sizes[i]);
 
 	#recompile after instrumentation
 	os.system( cuda_out_sac2c);
-     
+
 	#cleanup
 	os.system("rm " + tmp_file);
 
@@ -206,15 +206,15 @@ kenrel_names = [];
 
 i = 0;
 while i < len(sizes):
-    cmd = "sac2c -t cuda -v0 -O3 -dopra -doexpar -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
+    cmd = "sac2c_d -t cuda_man -v0 -O3 -check g -norco -dopra -doexpar -d cccall -DSIZE=" + `sizes[i]` + " " + prog + " -o " + cuda_out_exe;
     print cmd;
-    os.system(cmd); 
-    instrument_loop( cuda_out_src, 0, -1, sizes[i]);
-    os.system( cuda_out_sac2c);
+    os.system(cmd);
+    #instrument_loop( cuda_out_src, 0, -1, sizes[i]);
+    #os.system( cuda_out_sac2c);
     os.system("rm " + tmp_file);
     j = 0;
     while j < runs:
-        os.system( "./" + cuda_out_exe + " ../input/sac_" + `sizes[i]` + ".dat >> " + tmp_file);
+        os.system( "optirun ./" + cuda_out_exe + " < ../input/sac_" + `sizes[i]` + ".dat >> " + tmp_file);
         j = j + 1;
     compute_loop_average(sizes[i], tmp_file, cuda_reuse);
     i = i + 1;

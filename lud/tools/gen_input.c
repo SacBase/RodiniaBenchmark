@@ -9,7 +9,7 @@ typedef float FP_NUMBER;
 #endif
 
 
-#define GET_RAND_FP ((FP_NUMBER)rand()/((FP_NUMBER)(RAND_MAX)+(FP_NUMBER)(1)))
+#define GET_RAND_FP ((FP_NUMBER)random()/((FP_NUMBER)(RAND_MAX)+(FP_NUMBER)(1)))
 char L_FNAME[32], U_FNAME[32], A_FNAME[32];
 
 int main (int argc, char **argv){
@@ -36,7 +36,7 @@ int main (int argc, char **argv){
     }
 
     //srand(time(NULL));
-    srand(7);
+    srandom(7);
 
     sprintf(L_FNAME, "l-%d.dat", MatrixDim);
     fl = fopen(L_FNAME, "wb");

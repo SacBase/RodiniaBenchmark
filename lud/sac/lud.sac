@@ -1,14 +1,23 @@
 use StdIO: all;
 use Array: all;
 use CommandLine: all;
-use Benchmarking: all; 
+use Random: all;
+use Constants: {randmax};
+use Benchmarking: all;
 
 #define FLOAT
 
-#ifdef FLOAT 
+//#define FIBRE
+/* Fibre doesn't work with the CUDA transfer mechs,
+ * there seems to be something going wrong in how
+ * the actual data pointer is passed around within
+ * this application after FibreRead* has been called.
+ */
+
+#ifdef FLOAT
 #define DBL float
 #define TOD tof
-#else 
+#else
 #define DBL double
 #define TOD tod
 #endif
@@ -24,9 +33,9 @@ DBL[.,.] compute(DBL[.,.] mat)
   for( i = 0; i < SIZE; i++) {
     for (j = i; j < SIZE; j++) {
       summ = mat[i, j];
-      for (k = 0; k < i; k++) { 
+      for (k = 0; k < i; k++) {
         summ -= mat[i,k]*mat[k,j];
-      }  
+      }
       mat[i,j] = summ;
     }
 
@@ -76,7 +85,7 @@ DBL[.,.] compute(DBL[.,.] mat)
 
     mat = with {
             ([i+1,i+1] <= iv=[m,j] < [SIZE,SIZE]) {
-              res = mat[iv] - mat[m,i]*mat[i,j];  
+              res = mat[iv] - mat[m,i]*mat[i,j];
             }:res;
           }:modarray(mat);
   }
@@ -87,28 +96,77 @@ DBL[.,.] compute(DBL[.,.] mat)
 
 int main()
 {
-  DBL[SIZE,SIZE] mat;
+  DBL[SIZE,SIZE] L, U, mat;
 
-#ifdef FLOAT 
+#ifdef FIBRE
+#ifdef FLOAT
   mat = FibreScanFloatArray( );
-#else 
+#else
   mat = FibreScanDoubleArray( );
+#endif /* FLOAT */
+#else
+#define GET_RAND (TOD(random())/(TOD(randmax())+TOD(1.0)))
+  /* matrix generation is in line with what is used in the
+   * generate input tool.
+   */
+  srandom( toui(7));
+
+  L, U = with {} : (genarray([SIZE,SIZE], TOD(0.0)), genarray([SIZE,SIZE], TOD(0.0)));
+
+  for(i = 0; i < SIZE; i++)
+  {
+    for(j = 0; j < SIZE; j++)
+    {
+      if ( i == j) {
+          L[i,j] = TOD(1.0);
+          U[i,j] = GET_RAND;
+      } else if (i < j){
+          L[i,j] = TOD(0.0);
+          U[i,j] = GET_RAND;
+      } else { // i > j
+          L[i,j] = GET_RAND;
+          U[i,j] = TOD(0.0);
+      }
+    }
+  }
+
+  mat = with {
+      (. <= [i,j] <= .) {
+          res = TOD(0.0);
+          for(k = 0; k < SIZE; k++)
+            res += L[i,k] * U[k,j];
+        } : res;
+    } : genarray([SIZE,SIZE], TOD(0.0));
+#endif /* FIBRE */
+#if 0
+#ifdef OUTPUT
+#ifdef FIBRE
+  FibrePrint( mat);
+#else
+  print( U);
+  print( L);
+  print( mat);
+#endif /* FIBRE */
+#endif /* OUTPUT */
 #endif
 
-  interval0 = getInterval( "LUD", 0, 3);
+  interval0 = getInterval( "LUD", 0, 1);
   start( interval0 );
-  mat = compute(mat);
+  mat = compute( mat);
   end( interval0 );
 
   time, unit = returnResultUnit(interval0);
-  printf(" %.3f %s", time, unit);
+  printf(" %.3f %s\n", time, unit);
 
 #ifdef OUTPUT
-  FibrePrint(mat);
-  //print(mat);
+#ifdef FIBRE
+  FibrePrint( mat);
+#else
+  print( mat);
+#endif /* FIBRE */
   return( 0);
 #else
-  return( toi(sum(mat)));
-#endif
+  return( toi(mat[0,0]));
+#endif /* OUTPUT */
 }
 
