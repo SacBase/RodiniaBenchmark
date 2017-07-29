@@ -1,5 +1,6 @@
 use StdIO: all;
 use Array: all;
+use Constants: {randmax};
 use Random: all;
 use Math: all;
 
@@ -30,8 +31,6 @@ use Math: all;
 
 #define ITER 20
 
-#define RAND_MAX 2147483647
-
 #define ETA      TOD(0.3)
 #define MOMENTUM TOD(0.3)
 
@@ -45,7 +44,7 @@ DBL[.,.] bpnn_randomize_weights( DBL[.,.] w)
 
   for (i = 0; i <= m; i++) {
     for (j = 0; j <= n; j++) {
-     w[i,j] = TOD(random(0, RAND_MAX))/TOD(RAND_MAX);
+     w[i,j] = TOD(random())/TOD(randmax());
     }
   }
   return( w);
@@ -81,7 +80,7 @@ DBL[.] load( DBL[.] w)
   m = shape(w)[0]-1;
 
   for (i = 1; i <= m; i++) {
-    w[i] =  TOD(random(0, RAND_MAX))/TOD(RAND_MAX);
+    w[i] =  TOD(random())/TOD(randmax());
   }
   return( w);
 }
