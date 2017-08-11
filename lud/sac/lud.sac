@@ -1,8 +1,7 @@
 use StdIO: all;
 use Array: all;
 use CommandLine: all;
-use Random: all;
-use Constants: {randmax};
+use Math: all;
 use Benchmarking: all;
 
 #define FLOAT
@@ -25,6 +24,27 @@ use Benchmarking: all;
 #ifndef SIZE
 #define SIZE 64
 #endif
+
+// is the same as used in C/CUDA implementation
+DBL[.,.] create_matrix(int[] size)
+{
+  lamda = TOD(-0.001);
+
+  coe_i = with {
+    (. <= [i] <= .) : TOD(10) * exp(lamda * TOD(i));
+  } : genarray([size], TOD(0));
+
+  coe = with {
+    (. <= [i] < [size]) : coe_i[size-1-i];
+    ([size] <= [k] <= .) : coe_i[k-size+1];
+  } : genarray([2*size-1], TOD(0));
+
+  m = with {
+    (. <= [i,j] <= .) : coe[size-1-i+j];
+  } : genarray([size, size], TOD(-1));
+
+  return m;
+}
 
 DBL[.,.] compute(DBL[.,.] mat)
 {
@@ -105,46 +125,13 @@ int main()
   mat = FibreScanDoubleArray( );
 #endif /* FLOAT */
 #else
-#define GET_RAND (TOD(random())/(TOD(randmax())+TOD(1.0)))
-  /* matrix generation is in line with what is used in the
-   * generate input tool.
-   */
-  srandom( toui(7));
-
-  L, U = with {} : (genarray([SIZE,SIZE], TOD(0.0)), genarray([SIZE,SIZE], TOD(0.0)));
-
-  for(i = 0; i < SIZE; i++)
-  {
-    for(j = 0; j < SIZE; j++)
-    {
-      if ( i == j) {
-          L[i,j] = TOD(1.0);
-          U[i,j] = GET_RAND;
-      } else if (i < j){
-          L[i,j] = TOD(0.0);
-          U[i,j] = GET_RAND;
-      } else { // i > j
-          L[i,j] = GET_RAND;
-          U[i,j] = TOD(0.0);
-      }
-    }
-  }
-
-  mat = with {
-      (. <= [i,j] <= .) {
-          res = TOD(0.0);
-          for(k = 0; k < SIZE; k++)
-            res += L[i,k] * U[k,j];
-        } : res;
-    } : genarray([SIZE,SIZE], TOD(0.0));
+  mat = create_matrix(SIZE);
 #endif /* FIBRE */
-#if 0
+#if 0 /* XXX */
 #ifdef OUTPUT
 #ifdef FIBRE
   FibrePrint( mat);
 #else
-  print( U);
-  print( L);
   print( mat);
 #endif /* FIBRE */
 #endif /* OUTPUT */
