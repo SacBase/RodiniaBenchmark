@@ -2,18 +2,18 @@ CC = gcc
 NVCC = nvcc
 
 DEFS += \
-		-DGPU_TIMER \
+		#-DGPU_TIMER \
 		$(SPACE)
 
 NVCCFLAGS += -I../common \
 			 -O3 \
 			 -use_fast_math \
-			 -arch=sm_50 \
+			 -arch=sm_35 \
 			 -lm \
 			 $(SPACE)
 
 CFLAGS += -I../common \
-					-I/usr/include/cuda \
+		  -I/usr/include/cuda \
 		  -O3 \
 		  -Wall \
 		  $(SPACE)

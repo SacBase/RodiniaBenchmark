@@ -2,7 +2,6 @@ use StdIO: all;
 use Array: all;
 use CommandLine: all;
 use Math: all;
-use Benchmarking: all;
 
 #define FLOAT
 
@@ -26,6 +25,7 @@ use Benchmarking: all;
 #endif
 
 // is the same as used in C/CUDA implementation
+inline
 DBL[.,.] create_matrix(int[] size)
 {
   lamda = TOD(-0.001);
@@ -46,6 +46,7 @@ DBL[.,.] create_matrix(int[] size)
   return m;
 }
 
+inline
 DBL[.,.] compute(DBL[.,.] mat)
 {
 #ifdef C_IMP /* C implementation */
@@ -137,13 +138,7 @@ int main()
 #endif /* OUTPUT */
 #endif
 
-  interval0 = getInterval( "LUD", 0, 1);
-  start( interval0 );
   mat = compute( mat);
-  end( interval0 );
-
-  time, unit = returnResultUnit(interval0);
-  printf(" %.3f %s\n", time, unit);
 
 #ifdef OUTPUT
 #ifdef FIBRE

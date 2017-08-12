@@ -1,5 +1,7 @@
 SAC2C := sac2c_d
-SACFLAGS := -v1 -O3 -noRCO
+SIZE  ?= 2048
+ITER  ?= 1000
+SACFLAGS := -v1 -O3 -noRCO -DSIZE=$(SIZE) -DITER=$(ITER)
 
 ifeq ($(out),1)
 	SACFLAGS += -DOUTPUT

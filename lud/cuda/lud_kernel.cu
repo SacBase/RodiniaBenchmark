@@ -267,9 +267,11 @@ void lud_cuda(float *m, int matrix_dim, int do_shared)
   int i=0;
   dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
 
+#ifdef GPU_TIMER
   /* beginning of timing point */
   struct timeval tv1, tv2;
   gettimeofday(&tv1, NULL);
+#endif
 
   if( do_shared) {
     //printf("Executing kernels with shared memory!\n");
@@ -297,9 +299,11 @@ void lud_cuda(float *m, int matrix_dim, int do_shared)
     lud_diagonal<<<1,BLOCK_SIZE>>>(m, matrix_dim, i);
   }
 
+#ifdef GPU_TIMER
   /* end of timing point */
   gettimeofday(&tv2, NULL);
   double runtime = ((tv2.tv_sec*1000.0 + tv2.tv_usec/1000.0)-(tv1.tv_sec*1000.0 + tv1.tv_usec/1000.0));
   printf("Runtime(milliseconds): %f\n", runtime);
+#endif
 }
 

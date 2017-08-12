@@ -1,7 +1,6 @@
 use StdIO: all;
 use Array: all;
 use Math:  all;
-use Constants: {randmax};
 use Random: all;
 use Benchmarking: all;
 

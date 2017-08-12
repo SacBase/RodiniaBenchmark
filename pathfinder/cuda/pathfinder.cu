@@ -16,7 +16,7 @@ int rows, cols;
 int* data;
 int** wall;
 int* result;
-#define M_SEED 9
+#define M_SEED 7
 int pyramid_height;
 
 //#define BENCH_PRINT

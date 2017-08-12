@@ -418,7 +418,7 @@ main( int argc, char** argv)
 void
 runTest( int argc, char** argv) 
 {
-  int rows, cols, size_I, size_R, niter = 10, iter;
+  int rows, cols, size_I, size_R, niter, iter;
   float *I, *J, lambda, q0sqr, sum, sum2, tmp, meanROI,varROI ;
 
   float *J_cuda;
@@ -442,7 +442,7 @@ runTest( int argc, char** argv)
   niter = NITER;
 
   size_I = cols * rows;
-  size_R = (r2-r1+1)*(c2-c1+1);   
+  size_R = (r2-r1+1)*(c2-c1+1);
 
   I = (float *)malloc( size_I * sizeof(float) );
   J = (float *)malloc( size_I * sizeof(float) );
@@ -537,11 +537,11 @@ runTest( int argc, char** argv)
 
 void random_matrix(float *I, int rows, int cols)
 {
-  srand(7);
+  srandom(7);
 	
   for( int i = 0 ; i < rows ; i++){
     for ( int j = 0 ; j < cols ; j++){
-      I[i * cols + j] = (float)rand()/(float)RAND_MAX ;
+      I[i * cols + j] = (float)random()/(float)RAND_MAX ;
 //      I[i * cols + j] = (float)(i+j)/(float)(2147483647);
     }
   }

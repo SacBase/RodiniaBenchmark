@@ -4,14 +4,17 @@
 #include <sys/time.h>
 #include <assert.h>
 
+//#define USEFILE
+/* For reading and writing file output */
+
 #define BLOCK_SIZE 16
 #define STR_SIZE 256
+
+#define ITER 5000
 
 #ifndef SIZE
 #define SIZE 1024
 #endif
-
-#define ITER 5000
 
 /* maximum power density possible (say 300W for a 10mm x 10mm chip)	*/
 #define MAX_PD	     3000000.0f
@@ -35,6 +38,35 @@ void run(int argc, char** argv);
 #define pin_stats_reset()   startCycle()
 #define pin_stats_pause(cycles)   stopCycle(cycles)
 #define pin_stats_dump(cycles)    printf("timer: %Lu\n", cycles)
+
+static inline
+double range_random(int min, int max)
+{ 
+  long int n;
+  do 
+  { 
+    n=random(); 
+  } while (n==RAND_MAX);
+  
+  return((((n%RAND_MAX)/(double)RAND_MAX) * (max-min+1) + min));
+}
+
+static
+void generateinput(float * powerar, float * tempar, int grid_rows, int grid_cols)
+{ // It is assumed that both *ar's have been allocated
+  int i,j;
+
+  srandom( 7);
+
+  for(i = 0; i < grid_rows; i++)
+  {
+    for(j = 0; j < grid_cols; j++)
+    {
+      powerar[i*grid_cols+j] = range_random(4, 706)/1000000.0;
+      tempar[i*grid_cols+j] = range_random(322980566, 343964157)/1000000.0;
+    }
+  }
+}
 
 void fatal(char *s)
 {
@@ -259,6 +291,7 @@ int compute_tran_temp(float *MatrixPower,float *MatrixTemp[2], int col, int row,
     //cudaThreadSynchronize();
     count++;
   }
+
   gettimeofday( &tv2, NULL);
   double runtime = ((tv2.tv_sec+ tv2.tv_usec/1000000.0)-(tv1.tv_sec+ tv1.tv_usec/1000000.0));
   printf("Runtime(seconds): %f\n", runtime);
@@ -269,6 +302,7 @@ int compute_tran_temp(float *MatrixPower,float *MatrixTemp[2], int col, int row,
 
 void usage(int argc, char **argv)
 {
+#ifdef USEFILE
   fprintf(stderr, "Usage: %s <grid_rows/grid_cols> <pyramid_height> <sim_time> <temp_file> <power_file> <output_file>\n", argv[0]);
   fprintf(stderr, "\t<grid_rows/grid_cols>  - number of rows/cols in the grid (positive integer)\n");
   fprintf(stderr, "\t<pyramid_height> - pyramid heigh(positive integer)\n");
@@ -276,6 +310,10 @@ void usage(int argc, char **argv)
   fprintf(stderr, "\t<temp_file>  - name of the file containing the initial temperature values of each cell\n");
   fprintf(stderr, "\t<power_file> - name of the file containing the dissipated power values of each cell\n");
   fprintf(stderr, "\t<output_file> - name of the output file\n");
+#else
+  fprintf(stderr, "Usage: %s\n", argv[0]);
+  fprintf(stderr, "\tAll key parameters are encoded as C-Macros, see source for details.\n");
+#endif
   exit(1);
 }
 
@@ -283,7 +321,7 @@ int main(int argc, char** argv)
 {
   run(argc,argv);
 
-  return( 0);
+  return EXIT_SUCCESS;
 }
 
 void run(int argc, char** argv)
@@ -319,9 +357,11 @@ void run(int argc, char** argv)
   total_iterations = ITER;
   pyramid_height = 2; 
 
+#ifdef USEFILE
   tfile=argv[1];
   pfile=argv[2];
   ofile=argv[3];
+#endif
 	
   size=grid_rows*grid_cols;
 
@@ -347,9 +387,13 @@ void run(int argc, char** argv)
   printf("pyramidHeight: %d\ngridSize: [%d, %d]\nborder:[%d, %d]\nblockGrid:[%d, %d]\ntargetBlock:[%d, %d]\n",
 	 pyramid_height, grid_cols, grid_rows, borderCols, borderRows, blockCols, blockRows, smallBlockCol, smallBlockRow);
 #endif
-	
+
+#ifdef USEFILE
   readinput(FilesavingTemp, grid_rows, grid_cols, tfile);
   readinput(FilesavingPower, grid_rows, grid_cols, pfile);
+#else
+  generateinput(FilesavingPower, FilesavingTemp, grid_rows, grid_cols);
+#endif
 
   float *MatrixTemp[2], *MatrixPower;
   cudaMalloc((void**)&MatrixTemp[0], sizeof(float)*size);
@@ -373,7 +417,9 @@ void run(int argc, char** argv)
 #endif
   cudaMemcpy(MatrixOut, MatrixTemp[ret], sizeof(float)*size, cudaMemcpyDeviceToHost);
 
+#ifdef USEFILE
   writeoutput( MatrixOut,grid_rows, grid_cols, ofile);
+#endif
 
   cudaFree(MatrixPower);
   cudaFree(MatrixTemp[0]);

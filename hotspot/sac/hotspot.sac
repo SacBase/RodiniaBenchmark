@@ -1,7 +1,6 @@
 use StdIO: all;
 use Array: all;
-use Rand: all except{srandom};
-use Random: {srandom};
+use Random: all;
 use Benchmarking: all;
 
 /* This is a direct translation of the OpenMP version in
@@ -148,6 +147,9 @@ DBL[SIZE,SIZE] compute_tran_temp( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power)
       temp = single_iteration( temp, power, amb_temp, Rx_1, Ry_1, Rz_1, step_div_Cap);
     }
     end( interval0 );
+
+    time, unit = returnResultUnit(interval0);
+    printf(" %.3f %s\n", time, unit);
 
     return( temp);
 }

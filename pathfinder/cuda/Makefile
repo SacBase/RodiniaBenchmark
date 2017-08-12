@@ -2,7 +2,7 @@ include ../../common/make.config
 
 CC := $(CUDA_DIR)/bin/nvcc
 INCLUDE := $(CUDA_DIR)/include
-CFLAGS := -arch sm_50
+CFLAGS := -arch sm_35
 
 SRC = pathfinder.cu
 

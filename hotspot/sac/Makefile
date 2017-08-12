@@ -1,33 +1,16 @@
-SAC2C = sac2c_d
-SAC2CFLAGS = -O3 -v2 -DOUTPUT
+SAC2C := sac2c_d
+SIZE ?= 1024
+ITER ?= 20
+SACFLAGS := -v1 -O3 -noRCO -DSIZE=$(SIZE) -DITER=$(ITER)
+# `-noRCO` is needed for the CUDA transfer mechs to work, this
+# option should be left on for all runs - for consistency.
 
-all: hotspot_sac_seq hotspot_sac_cuda
+.PHONY: all
+all: seq_out cuda_out cuda_alloc_out cuda_man_out cuda_reg_out
 
-hotspot_sac_seq: hotspot.sac
-	$(SAC2C) $(SAC2CFLAGS) -o $@ $<
+%_out: hotspot.sac
+	$(SAC2C) $(SACFLAGS) -t $* -o $@ $^
 
-hotspot_sac_mt: hotspot.sac
-	$(SAC2C) -t mt_pth $(SAC2CFLAGS) -o $@ $<
-
-hotspot_sac_cuda: hotspot.sac
-	$(SAC2C) -t cuda $(SAC2CFLAGS) -o $@ $<
-
-hotspot_sac_seq_out: hotspot.sac
-	$(SAC2C) $(SAC2CFLAGS) -o $@ $<
-
-hotspot_sac_mt_out: hotspot.sac
-	$(SAC2C) -t mt_pth $(SAC2CFLAGS) -o $@ $<
-
-hotspot_sac_cuda_out: hotspot.sac
-	$(SAC2C) -t cuda $(SAC2CFLAGS) -o $@ $<
-
-check: hotspot_sac_cuda_out hotspot_sac_seq_out
-	./hotspot_sac_cuda_out >res_cuda
-	./hotspot_sac_seq_out >res_seq
-	diff res_cuda res_seq | head
-
-run: hotspot_sac_seq hotspot_sac_cuda
-	@echo "\n \n ***** SAC seq *****"
-	-time ./hotspot_sac_seq
-	@echo "\n \n ***** SAC cuda *****"
-	-time ./hotspot_sac_cuda
+.PHONY: clean
+clean:
+	$(RM) *_out *_out.cu *_out.c

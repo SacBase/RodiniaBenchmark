@@ -60,7 +60,9 @@ main ( int argc, char *argv[] )
   func_ret_t ret;
   const char *input_file = NULL;
   float *m, *d_m, *mm;
+#ifdef GPU_TIMER
   stopwatch sw;
+#endif
 
   while ((opt = getopt_long(argc, argv, "::vms:i:", 
           long_options, &option_index)) != -1 ) {
@@ -133,8 +135,10 @@ main ( int argc, char *argv[] )
   cudaMalloc((void**)&d_m,
              matrix_dim*matrix_dim*sizeof(float));
 
+#ifdef GPU_TIMER
   /* beginning of timing point */
   stopwatch_start(&sw);
+#endif
   cudaMemcpy(d_m, m, matrix_dim*matrix_dim*sizeof(float),
          cudaMemcpyHostToDevice);
 
@@ -143,9 +147,11 @@ main ( int argc, char *argv[] )
   cudaMemcpy(m, d_m, matrix_dim*matrix_dim*sizeof(float),
          cudaMemcpyDeviceToHost);
 
+#ifdef GPU_TIMER
   /* end of timing point */
   stopwatch_stop(&sw);
   printf("Time consumed(ms): %lf\n", 1000*get_interval_by_sec(&sw));
+#endif
 
 #ifdef OUTPUT
   int i, j;

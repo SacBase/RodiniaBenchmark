@@ -1,11 +1,10 @@
-
-#include ../../../common/make.config
-
-CUDA_LIB_DIR = /usr/local/cuda/lib
+include ../../common/make.config
 
 #CUDA compiler
 NVCC := nvcc
-NVCC_FLAGS = -arch=sm_20 -I$(CUTIL)
+SIZE ?= 1024
+ITER ?= 5000
+NVCC_FLAGS += -DSIZE=$(SIZE) -DITER=$(ITER) -arch=sm_35 -I$(CUDA_DIR)/include
 
 # 'make dbg=1' enables NVCC debugging
 ifeq ($(dbg),1)
