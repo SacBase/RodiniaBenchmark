@@ -4,8 +4,8 @@ INCLUDE ("${CMAKE_SOURCE_DIR}/cmake-common/build-sac2c-program.cmake")
 INCLUDE ("${CMAKE_SOURCE_DIR}/cmake-common/resolve-sac2c-dependencies.cmake")
 
 set(SAC_SRC
-    backprop.sac
-    backprop_no_boundary.sac
+    bfs.sac
+    test.sac
 )
 
 FOREACH(name ${SAC_SRC})
