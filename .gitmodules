@@ -1,0 +1,4 @@
+[submodule "cmake-common"]
+  path = cmake-common
+  url = git@github.com:SacBase/cmake-common.git
+  ignore = all
