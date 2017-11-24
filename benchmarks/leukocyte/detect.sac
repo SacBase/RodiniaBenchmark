@@ -842,7 +842,21 @@ void ellipsetrack(File &img_file, double[.] xc0, double[.] yc0, int Nc, int R, i
 
 int main()
 {
-  err, img_file = fopen("../input/sac_frames.dat", "r");
+  if(CommandLine::argc() != 3)
+  {
+    printf("Usage: program <frame-file> <cell-file>\n");
+    RuntimeError::error(-1, "Invalid number of arguments: %d\n", CommandLine::argc());
+  }
+
+  frames = CommandLine::argv(1);
+  cells = CommandLine::argv(2);
+
+  err, img_file = fopen(frames, "r");
+
+  if(SysErr::fail(err))
+  {
+    RuntimeError::error(-1, "Failed to open: %s\n", frames);
+  }
 
   image_chopped = get_frame(true, false, img_file);
 
@@ -924,7 +938,12 @@ int main()
 */
 
 
-  err, cell_file = fopen("../input/sac_cells.dat", "r");
+  err, cell_file = fopen(cells, "r");
+
+  if(SysErr::fail(err))
+  {
+    RuntimeError::error(-1, "Failed to open: %s\n", cells);
+  }
 
   /* Note here we hardcoded the number of cells and
    * read their position from file. 
