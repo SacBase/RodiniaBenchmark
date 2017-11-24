@@ -78,3 +78,10 @@ that currently, the input size is hardcoded in the program by a #define macro. T
 a different input file with different size, we need to change the #define macro as well. The reason we do this is 
 to ensure all arrays in the SAC program is AKS.  
 
+Note:
+Sadly eular3d.sac doesn't seem to work anymore, produces losts of NANs.
+
+Compiled with:
+    sac2c_d -O2 -enforceIEEE -DOUTPUT eular3D.sac
+
+Additionally the fusion version causes the compiler to crash + memleak.

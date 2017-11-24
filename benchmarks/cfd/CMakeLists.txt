@@ -1,8 +1,7 @@
 INCLUDE("../../build-benchmark.cmake")
 
 set(SAC_SRC
-    bfs.sac
-    test.sac
+  euler3d.sac
 )
 
 BUILD_BENCHMARK("")

@@ -1,7 +1,0 @@
-Note:
-Sadly eular3d.sac doesn't seem to work anymore, produces losts of NANs.
-
-Compiled with:
-    sac2c_d -O2 -enforceIEEE -DOUTPUT eular3D.sac
-
-Additionally the fusion version causes the compiler to crash + memleak.
