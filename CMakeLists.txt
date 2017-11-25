@@ -10,15 +10,9 @@ SET (LINKSETSIZE        "500"       CACHE STRING "Set a value for -linksetsize p
 
 include("cmake-common/check-sac2c.cmake")
 
-#set(CMAKE_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
-#set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
-
 # For every target run CMakeLists.txt in src
 SET (TARGET_COUNT 1)
 FOREACH (TARGET IN ITEMS ${TARGETS})
-    #MESSAGE ("target #${TARGET_COUNT} = ${TARGET}")
     ADD_SUBDIRECTORY (benchmarks benchmarks/benchmarks-${TARGET})
     MATH (EXPR TARGET_COUNT "${TARGET_COUNT} + 1")
 ENDFOREACH ()
-
-#add_executable(hello ${PROJECT_SOURCE_DIR}/test.sac)

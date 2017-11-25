@@ -4,4 +4,4 @@ set(SAC_SRC
     backprop_no_boundary.sac
 )
 
-BUILD_BENCHMARK("-c")
+BUILD_BENCHMARK("")
