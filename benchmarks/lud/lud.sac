@@ -148,6 +148,7 @@ int main()
 #endif /* FIBRE */
   return( 0);
 #else
+  printf("%d\n", toi(mat[0,0]));
   return( toi(mat[0,0]));
 #endif /* OUTPUT */
 }

@@ -1,5 +1,5 @@
 SAC2C := sac2c_d
-SIZE ?= 64
+SIZE ?= 8192 
 SACFLAGS := -v1 -O3 -noRCO -doPRA -doEXPAR -DSIZE=$(SIZE)
 # `-noRCO` is needed for the CUDA transfer mechs to work, this
 # option should be left on for all runs - for consistency.

@@ -842,11 +842,11 @@ void ellipsetrack(File &img_file, double[.] xc0, double[.] yc0, int Nc, int R, i
 
 int main()
 {
-  if(CommandLine::argc() != 3)
-  {
-    printf("Usage: program <frame-file> <cell-file>\n");
-    RuntimeError::error(-1, "Invalid number of arguments: %d\n", CommandLine::argc());
-  }
+  //if(CommandLine::argc() != 3)
+  //{
+  //  printf("Usage: program <frame-file> <cell-file>\n");
+  //  RuntimeError::error(-1, "Invalid number of arguments: %d\n", CommandLine::argc());
+  //}
 
   frames = CommandLine::argv(1);
   cells = CommandLine::argv(2);
