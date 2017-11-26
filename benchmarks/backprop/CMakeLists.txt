@@ -4,4 +4,5 @@ set(SAC_SRC
     backprop_no_boundary.sac
 )
 
-BUILD_BENCHMARK("")
+set(FLAGS -v1 -O3 -noRCO -DFLOAT)
+BUILD_BENCHMARK("${FLAGS}")
