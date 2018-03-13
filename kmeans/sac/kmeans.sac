@@ -18,8 +18,6 @@ use Benchmarking: all;
 #define TOD tod
 #endif
 
-#define RANDOM_MAX 2147483647
-
 
 #define FLT_MAX (TOD(3.40282347e+38))
 

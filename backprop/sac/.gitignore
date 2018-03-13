@@ -1,0 +1,5 @@
+# local ignore
+
+# genereted by SaC
+*.c
+*.cu

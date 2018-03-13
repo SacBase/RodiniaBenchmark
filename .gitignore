@@ -1,0 +1,15 @@
+# build files
+*.out
+*_out
+*.o
+
+# log files
+*.log
+*.nv
+*.nvvp
+
+# vim swp
+*.swp
+
+# sac related
+*.sacbugreport

@@ -1,13 +1,14 @@
 SAC2C := sac2c_d
-SACFLAGS := -v1 -O3 -noRCO -DFLOAT
+SACFLAGS := -v1 -O3 -noRCO -DFLOAT -profile m -DLOOP
 # `-DLOOP` has been omitted as in the cuda_man
 # case we have undefined references popping up.
 
-SAC := seq_out
-CUDA := cuda_out cuda_alloc_out cuda_reg_out
+SAC := seq_out emr_seq_out
+CUDA := cuda_out emr_cuda_out
+# cuda_alloc_out cuda_reg_out
 
 .PHONY: all
-all: $(SAC) cuda cuda_man
+all: $(SAC) cuda
 
 .PHONY: cuda
 cuda: SACFLAGS += -DCUDA -doEXPAR -doPFD
@@ -21,6 +22,9 @@ cuda_man: cuda_man_out
 
 %_out: backprop.sac
 	$(SAC2C) $(SACFLAGS) -t $* -o $@ $^
+
+emr_%_out: backprop.sac
+	$(SAC2C) $(SACFLAGS) -doEMR -doELAAF -doELMP -t $* -o $@ $^
 
 %_nb_out: backprop_no_boundary.sac
 	$(SAC2C) -t $* $(SACFLAGS) -o $@ $^

@@ -235,8 +235,8 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
   max_size = IszX*IszY*Nfr;
 
   /* original particle centroid */
-  xe = IszY/2;
-  ye = IszX/2;
+  xe = TOD(IszY/2);
+  ye = TOD(IszX/2);
   
   /* expected object locations, compared to center */
   radius = 5;
@@ -270,8 +270,8 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
   ind = genarray([Nparticles, countOnes], (0));/* [Nparticles,countOnes] */
 
   for(x = 0; x < Nparticles; x++){
-    arrayX[x] = TOD(xe);
-    arrayY[x] = TOD(ye);
+    arrayX[x] = xe;
+    arrayY[x] = ye;
   }
 
   for(k = 1; k < Nfr; k++) {
@@ -296,8 +296,8 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
        */
       likelihood[x] = TOD(0.0);
       for(y = 0; y < countOnes; y++) {
-	indX = toi(roundDouble(arrayX[x])) + toi(objxy[y*2 + 1]);
-	indY = toi(roundDouble(arrayY[x])) + toi(objxy[y*2]);
+	      indX = toi(roundDouble(arrayX[x])) + toi(objxy[y*2 + 1]);
+	      indY = toi(roundDouble(arrayY[x])) + toi(objxy[y*2]);
 
         if( abs(indX*IszY*Nfr + indY*Nfr + k) >= max_size) {
           a = 0; b = 0; c = 0;
@@ -305,7 +305,7 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
         else {
           a = indX; b = indY; c = k;
         }
-	likelihood[x] = likelihood[x] + TOD((I[a,b,c] - 100)*(I[a,b,c] - 100) - (I[a,b,c] - 228)*(I[a,b,c] - 228))/TOD(50.0);
+	      likelihood[x] = likelihood[x] + TOD((I[a,b,c] - 100)*(I[a,b,c] - 100) - (I[a,b,c] - 228)*(I[a,b,c] - 228))/TOD(50.0);
       }
       likelihood[x] = likelihood[x]/(TOD( countOnes));
     }
@@ -325,18 +325,6 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
       weights[x] = weights[x]/sumWeights;
     }
 
-    xe = TOD(0.0);
-    ye = TOD(0.0);
-    /* estimate the object location by expected values */
-    for(x = 0; x < Nparticles; x++){
-      xe += arrayX[x] * weights[x];
-      ye += arrayY[x] * weights[x];
-    }
-
-    printf("XE: %lf\n", xe);
-    printf("YE: %lf\n", ye);
-    distance = sqrt( pow(TOD(xe-TOD(IszY/2)),TOD(2.0)) + pow(TOD(ye-TOD(IszX/2)),TOD(2.0)));
-    printf("%lf\n", distance);
 
     /* display(hold off for now)
      * pause(hold off for now)
@@ -365,6 +353,19 @@ void particleFilter(int[IszX, IszY, Nfr] I, int[Nparticles] seed)
       weights[x] = TOD(1.0)/(TOD(Nparticles));
     }
   }
+
+  xe = TOD(0.0);
+  ye = TOD(0.0);
+  /* estimate the object location by expected values */
+  for(x = 0; x < Nparticles; x++){
+    xe += arrayX[x] * weights[x];
+    ye += arrayY[x] * weights[x];
+  }
+
+  printf("XE: %f\n", xe);
+  printf("YE: %f\n", ye);
+  distance = sqrt( pow(TOD(xe-TOD(IszY/2)),TOD(2.0)) + pow(TOD(ye-TOD(IszX/2)),TOD(2.0)));
+  printf("%f\n", distance);
 }
 
 int main()

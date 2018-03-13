@@ -3,8 +3,6 @@ use Array: all;
 use CommandLine: all;
 use Math: all;
 
-#define FLOAT
-
 //#define FIBRE
 /* Fibre doesn't work with the CUDA transfer mechs,
  * there seems to be something going wrong in how
@@ -47,7 +45,7 @@ DBL[.,.] create_matrix(int[] size)
 }
 
 inline
-DBL[.,.] compute(DBL[.,.] mat)
+DBL[SIZE,SIZE] compute(DBL[SIZE,SIZE] mat)
 {
 #ifdef C_IMP /* C implementation */
 

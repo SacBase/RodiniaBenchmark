@@ -1,1 +1,1 @@
-C-cloen works, but modified version leads to core-dump - possible sac bug?
+C-ish works, but modified version leads to core-dump for `seq` target - possible sac bug?

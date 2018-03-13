@@ -112,9 +112,7 @@ DBL[SIZE,SIZE] single_iteration( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power,
  * transfer differential equations to difference equations
  * and solves the difference equations by iterating
  */
-/*
 inline
-*/
 DBL[SIZE,SIZE] compute_tran_temp( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power)
 {
     /* chip parameters	*/
@@ -140,16 +138,9 @@ DBL[SIZE,SIZE] compute_tran_temp( DBL[SIZE,SIZE] temp, DBL[SIZE,SIZE] power)
 
     step_div_Cap = sp/Cap;
 
-    interval0 = getInterval( "HOTSPOT", 0 );
-    start( interval0 );
-
     for (i = 0; i < ITER ; i++) {
       temp = single_iteration( temp, power, amb_temp, Rx_1, Ry_1, Rz_1, step_div_Cap);
     }
-    end( interval0 );
-
-    time, unit = returnResultUnit(interval0);
-    printf(" %.3f %s\n", time, unit);
 
     return( temp);
 }
@@ -159,14 +150,14 @@ int main()
   DBL[SIZE, SIZE] temp;
   DBL[SIZE, SIZE] power;
 
-/*
   temp = FibreScanFloatArray();
   power = FibreScanFloatArray();
-*/
 
+
+/*
   srandom( toui(7));
 
-  /* Generate random input arrays */
+  // Generate random input arrays
   temp  = genarray([SIZE, SIZE], TOD(0.0));
   power = genarray([SIZE, SIZE], TOD(0.0));
 
@@ -181,8 +172,18 @@ int main()
       power[i, j] = TOD(random(4, 706))/TOD(1000000.0);
     }
   }
+*/
+
+  interval0 = getInterval( "HOTSPOT", 0 );
+  start( interval0 );
 
   temp = compute_tran_temp(temp, power);
+
+  end( interval0 );
+
+  //time, unit = returnResultUnit(interval0);
+  //printf(" %.3f %s\n", time, unit);
+  printResult (interval0);
 
 #ifdef OUTPUT
   print( temp);

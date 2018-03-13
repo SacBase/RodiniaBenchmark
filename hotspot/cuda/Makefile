@@ -4,7 +4,7 @@ include ../../common/make.config
 NVCC := nvcc
 SIZE ?= 1024
 ITER ?= 5000
-NVCC_FLAGS += -DSIZE=$(SIZE) -DITER=$(ITER) -arch=sm_35 -I$(CUDA_DIR)/include
+NVCC_FLAGS += -DUSEFILE -DSIZE=$(SIZE) -DITER=$(ITER) -arch=sm_35 -I$(CUDA_DIR)/include
 
 # 'make dbg=1' enables NVCC debugging
 ifeq ($(dbg),1)

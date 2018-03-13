@@ -1,5 +1,5 @@
 use StdIO: all;
-use Array: all;
+use Array: all except {randmax};
 use Constants: {randmax};
 use Random: all;
 use Math: all;
@@ -29,7 +29,7 @@ use Math: all;
 #define HIDDEN1 17
 #define OUT1    2
 
-#define ITER 20
+#define ITER 200
 
 #define ETA      TOD(0.3)
 #define MOMENTUM TOD(0.3)
