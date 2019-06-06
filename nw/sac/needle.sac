@@ -4,8 +4,6 @@ use Rand: all except{srandom};
 use Random: {srandom};
 use Benchmarking: all;
 
-#define LIMIT -999
-
 #ifndef SIZE
 #define SIZE 2048
 #endif
@@ -13,8 +11,16 @@ use Benchmarking: all;
 #define ROWS       SIZE
 #define COLS       SIZE
 #define PENALTY    10
+#ifndef ITER
+#define ITER 1
+#endif
 
-inline int maximum( int a, int b, int c)
+specialize int[1025,1025] runTest(int[1025,1025] input_itemsets, int[1025,1025] reference);
+specialize int[2049,2049] runTest(int[2049,2049] input_itemsets, int[2029,2049] reference);
+specialize int[4097,4097] runTest(int[4097,4097] input_itemsets, int[4097,4097] reference);
+
+inline
+int maximum( int a, int b, int c)
 {
   k = 0;
   if( a <= b) {
@@ -31,12 +37,83 @@ inline int maximum( int a, int b, int c)
   return( k);
 }
 
+noinline
 int id( int x)
 {
   return( x);
 }
 
-int runTest( )
+int[.,.] runTest(int[.,.] input_itemsets, int[.,.] reference)
+{
+  max_rows = ROWS + 1;
+  max_cols = COLS + 1;
+  penalty = PENALTY;
+
+  //interval0 = getInterval( "NW", 0 );
+  //start( interval0 );
+
+  for(k = 0; k < ITER; k++) {
+
+  for( i = 1; i < max_cols; i++) {
+    input_itemsets = with {
+                       ( [1,1] <= iv=[r,c] < [1+i,1+i]) {
+                         if( r == (i - c + 1)) {
+                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c],
+                                          input_itemsets[r, c-1] - penalty,
+			                  input_itemsets[r-1, c] - penalty);
+                         }
+                         else {
+                           res = input_itemsets[r,c];
+                         }
+                       }:res;
+                     }:modarray( input_itemsets);
+  }
+
+  for( i = 1; i < max_cols-1; i++) {
+    input_itemsets = with {
+                       ( [1+i,1+i] <= iv=[r,c] < [max_rows,max_cols]) {
+                         if( r == (max_cols - c + i)) {
+                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c],
+                                          input_itemsets[r, c-1] - penalty,
+			                  input_itemsets[r-1, c] - penalty);
+                         }
+                         else {
+                           res = input_itemsets[r,c];
+                         }
+                       }:res;
+                     }:modarray( input_itemsets);
+  }
+
+  }
+
+  //end( interval0 );
+
+/*
+  for( i = 1; i < max_cols-1; i++) {
+    input_itemsets = with {
+                       ( [1+i,1+i] <= iv=[r,c] < [max_rows,max_cols]) {
+                         if( r > max_cols -10 || c < max_rows +20 || c+r < 123 ) {
+                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c],
+                                          input_itemsets[r, c-1] - penalty,
+			                  input_itemsets[r-1, c] - penalty);
+                         }
+                         else {
+                           res = input_itemsets[r,c];
+                         }
+                       }:res;
+                     }:modarray( input_itemsets);
+  }
+*/
+#ifdef OUTPUT
+  print(input_itemsets);
+  return( 0);
+#else
+  return (input_itemsets);
+#endif
+
+}
+
+int main( )
 {
   max_rows = ROWS + 1;
   max_cols = COLS + 1;
@@ -69,26 +146,17 @@ int runTest( )
     [ 0, -1, -1, -1, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2,  0,  0, -2, -1, -1, -1, -1, -1, -4],
     [-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1]
   ];
-	
-  srandom( toui(7) );  
-/*
-  input_itemsets = genarray( [max_rows, max_cols], 0); 
-  for( i=1; i< max_rows ; i++) {     
-    input_itemsets[i, 0] = random(0, 2147483647) % 10 + 1;
-  }
- 
-  for( j=1; j< max_cols ; j++) {    
-    input_itemsets[0, j] = random(0, 2147483647 )% 10 + 1;
-  }
-*/
+
+  srandom( toui(7) );
+
   input_itemsets = with {
                      ( [1, 0] <= iv < [ max_rows, 1]) {
                        /* res = random(0, 2147483647 )% 10 + 1; */
-                       res = rand()% 10 + 1; 
+                       res = rand()% 10 + 1;
                      }:res;
                      ( [0, 1] <= iv < [ 1, max_cols]) {
                        /* res = random(0, 2147483647 )% 10 + 1; */
-                       res = rand()% 10 + 1; 
+                       res = rand()% 10 + 1;
                      }:res;
                    }:genarray([max_rows, max_cols], 0);
 
@@ -96,93 +164,20 @@ int runTest( )
                 ([1,1] <= iv=[i,j] < [max_rows,max_cols]) {
                   res = id( blosum62[input_itemsets[i, 0]][input_itemsets[0, j]]);
                 }:res;
-              }:genarray([max_rows, max_cols], 0); 
-
-/*
-  for( i = 1; i< max_rows ; i++) {
-    input_itemsets[i, 0] = -i * penalty;
-  }
-
-  for( j = 1; j< max_cols ; j++) {
-     input_itemsets[0, j] = -j * penalty;
-  }
-*/
+              }:genarray([max_rows, max_cols], 0);
 
   input_itemsets = with {
                      ( [1, 0] <= iv=[i,j] < [ max_rows, 1]) {
                        res = id(-i) * penalty;
                      }:res;
                      ( [0, 1] <= iv=[i,j] < [ 1, max_cols]) {
-                       res = id(-j) * penalty; 
+                       res = id(-j) * penalty;
                      }:res;
                    }:genarray([max_rows, max_cols], 0);
 
+  input_itemsets = runTest(input_itemsets, reference);
 
-  //interval0 = getInterval( "NW", 0 );
-  //start( interval0 ); 
-
-  for( i = 1; i < max_cols; i++) {
-    input_itemsets = with {
-                       ( [1,1] <= iv=[r,c] < [1+i,1+i]) {
-                         if( r == (i - c + 1)) {
-                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c], 
-                                          input_itemsets[r, c-1] - penalty, 
-			                  input_itemsets[r-1, c] - penalty);
-                         }
-                         else {
-                           res = input_itemsets[r,c];
-                         }
-                       }:res;
-                     }:modarray( input_itemsets);
-  }
-
-  for( i = 1; i < max_cols-1; i++) {
-    input_itemsets = with {
-                       ( [1+i,1+i] <= iv=[r,c] < [max_rows,max_cols]) {
-                         if( r == (max_cols - c + i)) { 
-                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c], 
-                                          input_itemsets[r, c-1] - penalty, 
-			                  input_itemsets[r-1, c] - penalty);
-                         }
-                         else {
-                           res = input_itemsets[r,c];
-                         }
-                       }:res;
-                     }:modarray( input_itemsets);
-  }
-
-  //end( interval0 ); 
-
-/*
-  for( i = 1; i < max_cols-1; i++) {
-    input_itemsets = with {
-                       ( [1+i,1+i] <= iv=[r,c] < [max_rows,max_cols]) {
-                         if( r > max_cols -10 || c < max_rows +20 || c+r < 123 ) { 
-                           res = maximum( input_itemsets[r-1, c-1]+ reference[r, c], 
-                                          input_itemsets[r, c-1] - penalty, 
-			                  input_itemsets[r-1, c] - penalty);
-                         }
-                         else {
-                           res = input_itemsets[r,c];
-                         }
-                       }:res;
-                     }:modarray( input_itemsets);
-  }
-*/
-#ifdef OUTPUT
-  print(input_itemsets);
-  return( 0);
-#else
-  return( input_itemsets[max_rows-1,max_cols-1]);
-#endif
-
-}
-
-int main( )
-{
-  res = runTest( );
-
-  return( res);
+  return( input_itemsets[100,100]);
 }
 
 
